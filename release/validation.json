@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "source_sha256": "",
+  "checks": {
+    "apple_silicon_install_upgrade": {"passed": false, "evidence": ""},
+    "intel_install_upgrade": {"passed": false, "evidence": ""},
+    "macos_13": {"passed": false, "evidence": ""},
+    "visual_keyboard_voiceover": {"passed": false, "evidence": ""},
+    "real_soc_print_queue_cancel": {"passed": false, "evidence": ""},
+    "keychain_account_switching": {"passed": false, "evidence": ""}
+  }
+}

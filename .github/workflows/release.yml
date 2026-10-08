@@ -1,0 +1,95 @@
+name: Production Mac release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (for example 1.0.0)'
+        type: string
+        required: true
+        default: '1.0.0'
+permissions:
+  contents: read
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check release version and manual validation
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          python3 scripts/check-release-gates.py --version "$VERSION"
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: ./scripts/test-macos.sh
+      - run: node --test tests/site.test.mjs
+      - name: Scan dependencies
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          "$(go env GOPATH)/bin/govulncheck" ./cmd/socprint-macos
+      - name: Import Developer ID certificate into a temporary Keychain
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          DEVELOPER_ID: ${{ secrets.DEVELOPER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for required in CERTIFICATE CERTIFICATE_PASSWORD DEVELOPER_ID NOTARY_APPLE_ID NOTARY_TEAM_ID NOTARY_PASSWORD; do
+            [[ -n "${!required}" ]] || { echo "Missing required release secret: $required"; exit 1; }
+          done
+          release_keychain="$RUNNER_TEMP/print-soc-release.keychain-db"
+          release_keychain_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$release_keychain_password"
+          printf '%s' "$CERTIFICATE" | base64 -D > "$RUNNER_TEMP/developer-id.p12"
+          chmod 600 "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$release_keychain_password" "$release_keychain"
+          security set-keychain-settings -lut 21600 "$release_keychain"
+          security unlock-keychain -p "$release_keychain_password" "$release_keychain"
+          security import "$RUNNER_TEMP/developer-id.p12" -P "$CERTIFICATE_PASSWORD" -k "$release_keychain" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$release_keychain_password" "$release_keychain"
+          security list-keychains -d user -s "$release_keychain"
+          xcrun notarytool store-credentials print-soc-notary --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --keychain "$release_keychain"
+          rm "$RUNNER_TEMP/developer-id.p12"
+      - name: Build, notarize, staple and validate production DMG
+        env:
+          MODE: production
+          DEVELOPER_ID: ${{ secrets.DEVELOPER_ID }}
+          NOTARY_PROFILE: print-soc-notary
+        run: ./scripts/build-macos-app.sh
+      - name: Create a draft release and upload verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp release/validation.json dist/release-validation.json
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft --title "Print @ SoC v$VERSION" --notes-file release/NOTES.md \
+            dist/Print-at-SoC-Universal.dmg dist/Print-at-SoC-Universal.dmg.sha256 dist/release-validation.json
+      - name: Publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v$VERSION" --draft=false --latest
+      - name: Remove signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+          if [[ -f "$RUNNER_TEMP/print-soc-release.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/print-soc-release.keychain-db"
+          fi

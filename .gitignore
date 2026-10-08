@@ -1,0 +1,17 @@
+dist/
+*.exe
+socprint
+.DS_Store
+
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.p12
+*.pfx
+*.key
+*.pem
+*.sqlite*
+*.db
+settings.json

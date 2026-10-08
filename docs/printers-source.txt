@@ -1,0 +1,4 @@
+Printer catalog reference: SoC Technical Services printing directory.
+https://dochub.comp.nus.edu.sg/cf/printing/start
+
+The catalog records factual printer IDs, queues, locations, capabilities and access restrictions. Confirm the current directory before changing queues; access and availability can change. The full third-party documentation snapshot is not distributed with this project.

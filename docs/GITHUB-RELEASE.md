@@ -1,0 +1,26 @@
+# GitHub and website release
+
+Repository: https://github.com/ppannawitt/print-soc
+Website: https://ppannawitt.github.io/print-soc/
+
+The website is a static GitHub Pages site in `site/`. It has Download, Printing, and SSH keys pages. It uses no analytics, cookies, credentials, or printing backend. GitHub may retain ordinary hosting/request logs under its own privacy terms.
+
+## Website deployment
+
+In repository Settings → Pages, select **GitHub Actions** as the build source. The Website workflow deploys `site/` when it changes on `main`, or when dispatched manually. No custom domain is required. Repository settings may require owner access.
+
+The home page queries GitHub’s public latest-release API. It enables the download only for a non-draft, non-prerelease version with the production universal DMG, checksum, and `release-validation.json`. Development assets and release candidates never activate the main download. A missing release or failed API request leaves the download unavailable and preserves the guides and Releases link. The app’s official download filename stays `Print-at-SoC-Universal.dmg` across stable releases.
+
+## Prepare a public app release
+
+1. Complete every real-device and SoC check in `docs/RELEASE-READINESS.md` against the intended source. Run `python3 scripts/check-release-gates.py --fingerprint`, copy the result into `release/validation.json`, and record actual evidence for every check. Leave incomplete checks false. The fingerprint excludes the validation record itself so the record can be committed without invalidating it; code and test changes invalidate it.
+2. Configure a protected GitHub environment named `production`. Restrict deployments to `main` and add a required maintainer reviewer if available for the repository.
+3. Add environment secrets: `DEVELOPER_ID` (the full Developer ID Application identity), `DEVELOPER_ID_CERTIFICATE_BASE64` (P12 certificate export), `DEVELOPER_ID_CERTIFICATE_PASSWORD`, `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, and `NOTARY_PASSWORD` (app-specific Apple password). Keep these in GitHub Secrets, never in source or chat.
+4. Commit the completed validation record, review release notes, and dispatch **Production Mac release** from `main` with version `1.0.0`. The workflow tests and scans the source, imports the certificate into an ephemeral runner Keychain, builds the universal app, signs with hardened runtime, notarizes/staples the app and DMG, validates Gatekeeper, and uploads a draft release. It publishes only after all preceding steps pass. Signing material is removed even after failure.
+5. Verify the public release assets, checksum, download button, fresh download, and guide links. If release upload fails, any incomplete release stays a draft. Resolve it explicitly before retrying; the workflow does not overwrite an existing tag or release.
+
+Local production packaging requires the same manual-validation gate plus a Developer ID identity and notarytool Keychain profile. `MODE=development VERSION=1.0.0 ./scripts/build-macos-app.sh` is for maintainer review only.
+
+## Current status
+
+The validation record is deliberately incomplete. Developer ID credentials are unavailable on the development Mac. A signed public v1 DMG cannot be produced yet. The source and guide website can be published independently; they must not imply the app has passed the outstanding release checks.

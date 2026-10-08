@@ -1,0 +1,38 @@
+name: Mac app checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac-checks:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: ./scripts/test-macos.sh
+      - run: node --test tests/site.test.mjs
+      - run: python3 scripts/check-source.py
+      - name: Scan dependencies
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck ./cmd/socprint-macos
+      - name: Build development universal app and DMG
+        run: MODE=development ./scripts/build-macos-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Print-at-SoC-Universal-Development
+          path: |
+            dist/Print-at-SoC-Universal-Development.dmg
+            dist/Print-at-SoC-Universal-Development.dmg.sha256
+            docs/RELEASE-READINESS.md
