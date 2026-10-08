@@ -1,12 +1,42 @@
 {
   "version": "1.0.0",
-  "source_sha256": "",
+  "source_sha256": "e6ff1e6ab8fc4c0a87bf586944712c1c1604e05b31640f4373638d239e2b0934",
   "checks": {
-    "apple_silicon_install_upgrade": {"passed": false, "evidence": ""},
-    "intel_install_upgrade": {"passed": false, "evidence": ""},
-    "macos_13": {"passed": false, "evidence": ""},
-    "visual_keyboard_voiceover": {"passed": false, "evidence": ""},
-    "real_soc_print_queue_cancel": {"passed": false, "evidence": ""},
-    "keychain_account_switching": {"passed": false, "evidence": ""}
+    "apple_silicon_install_upgrade": {
+      "passed": false,
+      "evidence": ""
+    },
+    "intel_install_upgrade": {
+      "passed": false,
+      "evidence": ""
+    },
+    "macos_13": {
+      "passed": false,
+      "evidence": ""
+    },
+    "visual_keyboard_voiceover": {
+      "passed": false,
+      "evidence": ""
+    },
+    "real_soc_print_queue_cancel": {
+      "passed": false,
+      "evidence": ""
+    },
+    "keychain_account_switching": {
+      "passed": false,
+      "evidence": ""
+    }
+  },
+  "distribution": {
+    "mode": "unsigned",
+    "developer_id_signed": false,
+    "apple_notarized": false,
+    "gatekeeper_accepted": null
+  },
+  "maintainer_attestation": {
+    "date": "2026-10-08",
+    "testing_statement": "I have tested thoroughly, just publish now",
+    "publication_authorization": "Not required to be apple sign just release",
+    "coverage_note": "The maintainer reports thorough testing. Specific device and accessibility checks have not been independently observed; the per-check signed-production evidence remains incomplete."
   }
 }

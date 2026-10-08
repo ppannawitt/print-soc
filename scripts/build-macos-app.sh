@@ -9,7 +9,7 @@ if [[ -z "$go_command" && -x /usr/local/go/bin/go ]]; then go_command=/usr/local
 if [[ -z "$go_command" || "$(uname -s)" != Darwin ]]; then
   echo 'Build requires macOS, Go, and Apple command-line tools.' >&2; exit 1
 fi
-if [[ "$mode" != development && "$mode" != production ]]; then echo 'MODE must be development or production.' >&2; exit 1; fi
+if [[ "$mode" != development && "$mode" != unsigned && "$mode" != production ]]; then echo 'MODE must be development, unsigned, or production.' >&2; exit 1; fi
 if [[ "$mode" == production ]]; then
   : "${DEVELOPER_ID:?Production requires a Developer ID Application signing identity}"
   : "${NOTARY_PROFILE:?Production requires a notarytool Keychain profile}"
@@ -54,7 +54,11 @@ if [[ "$mode" == production ]]; then
   spctl --assess --type execute --verbose=2 "$app"
 else
   codesign --force --sign - --timestamp=none "$app"
-  printf 'DEVELOPMENT BUILD\nAd-hoc signed. Not notarized. Do not distribute as a public release.\n' > "$build_work/stage/Development-Build.txt"
+  if [[ "$mode" == unsigned ]]; then
+    printf 'Print @ SoC v%s\nAd-hoc signed. Not Developer ID signed or Apple-notarized. macOS may require approval to open.\n' "$version" > "$build_work/stage/Signing-Status.txt"
+  else
+    printf 'DEVELOPMENT BUILD\nAd-hoc signed. Not notarized.\n' > "$build_work/stage/Development-Build.txt"
+  fi
 fi
 codesign --verify --strict "$app"
 python3 "$project_root/scripts/check-macos-artifact.py" "$app"

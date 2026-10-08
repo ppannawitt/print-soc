@@ -4,7 +4,7 @@ Print @ SoC is an independent student printing app for NUS School of Computing. 
 
 ## Mac app
 
-V1 targets macOS 13 or later on Apple Silicon and Intel. The universal development DMG is `dist/Print-at-SoC-Universal-Development.dmg`. It is ad-hoc signed, explicitly labeled Development, and not notarized. Public distribution is blocked until the [release gates](docs/RELEASE-READINESS.md) are complete.
+V1 targets macOS 13 or later on Apple Silicon and Intel. [Download v1.0.0](https://github.com/ppannawitt/print-soc/releases/tag/v1.0.0). This release is ad-hoc signed and **not Apple-notarized**. The maintainer has authorized publication without Developer ID signing after reporting thorough testing. See the [validation record](docs/RELEASE-READINESS.md) for independently verified checks and remaining coverage limits.
 
 Every tab uses compact flat rows, green accents, system typography, separators, and system-aware light/dark appearance. The repeated top banner and sidebar connection label are removed. Notifications use native macOS alert sheets. Print keeps document preview beside the settings and the Print button in a fixed footer. File → Open PDF (⌘O), File → Print (⌘P), Account Settings (⌘,), and About are native menu commands.
 
@@ -47,7 +47,7 @@ Production mode requires an available Developer ID Application identity and nota
 MODE=production DEVELOPER_ID='Developer ID Application: …' NOTARY_PROFILE='…' ./scripts/build-macos-app.sh
 ```
 
-Complete the documented device, accessibility, installation/upgrade, and controlled SoC printing checks before production packaging and public distribution. Automated fixtures do not prove safety on every device.
+The signed production workflow requires the documented device, accessibility, installation/upgrade, and controlled SoC printing checks. To build the explicitly authorized unsigned release, use `MODE=unsigned VERSION=1.0.0 ./scripts/build-macos-app.sh`. Automated fixtures do not prove safety on every device.
 
 ## Project layout
 
@@ -56,14 +56,14 @@ Complete the documented device, accessibility, installation/upgrade, and control
 - `internal/catalog`: printer capabilities and student queue validation
 - `internal/credentials`, `internal/config`, `internal/store`: credential vault, settings, local history
 - `tests` and `scripts/test-macos.sh`: frontend and native PDF/bridge regression fixtures
-- `scripts/build-macos-app.sh`: universal development/production packaging
+- `scripts/build-macos-app.sh`: universal development/unsigned/production packaging
 
 The existing terminal implementation under `cmd/socprint` and `internal/tui` is retained. Windows/Linux redesign and release, local printer support, and App Store distribution are outside this Mac release.
 
 ## Website and v1 publication
 
-The [website](https://ppannawitt.github.io/print-soc/) contains the Mac download page, [printing guide](https://ppannawitt.github.io/print-soc/printing.html), and [manual SSH-key guide](https://ppannawitt.github.io/print-soc/ssh-keys.html). GitHub Pages publishes the static `site/` folder. The public download activates only when a verified production release is available; development builds are not promoted.
+The [website](https://ppannawitt.github.io/print-soc/) contains the Mac download page, [printing guide](https://ppannawitt.github.io/print-soc/printing.html), and [manual SSH-key guide](https://ppannawitt.github.io/print-soc/ssh-keys.html). GitHub Pages publishes the static `site/` folder. The main page links directly to the published universal v1 DMG and checksum, with its signing status disclosed.
 
-See [GitHub release setup](docs/GITHUB-RELEASE.md) for Pages configuration, signing secrets, manual validation, and the production release workflow. Version 1.0.0 is prepared as a development candidate; the outstanding release gates still block a public app release.
+See [GitHub release setup](docs/GITHUB-RELEASE.md) for Pages configuration, signing secrets, manual validation, and the production release workflow. Version 1.0.0 is published as an explicitly authorized unsigned release. Future Developer ID signed releases can use the production workflow.
 
 Source is under the [MIT license](LICENSE). The cloud/printer logo is original artwork and does not reproduce the SoC student club logo.

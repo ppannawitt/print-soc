@@ -9,7 +9,7 @@ The website is a static GitHub Pages site in `site/`. It has Download, Printing,
 
 In repository Settings → Pages, select **GitHub Actions** as the build source. The Website workflow deploys `site/` when it changes on `main`, or when dispatched manually. No custom domain is required. Repository settings may require owner access.
 
-The home page queries GitHub’s public latest-release API. It enables the download only for a non-draft, non-prerelease version with the production universal DMG, checksum, and `release-validation.json`. Development assets and release candidates never activate the main download. A missing release or failed API request leaves the download unavailable and preserves the guides and Releases link. The app’s official download filename stays `Print-at-SoC-Universal.dmg` across stable releases.
+The home page queries GitHub’s public latest-release API. It enables the download only for a non-draft, non-prerelease version with the universal DMG, checksum, and `release-validation.json`. Development assets and release candidates never activate the main download. V1 is an explicitly authorized ad-hoc signed release; the website and release notes disclose that it is not Apple-notarized. A missing release or failed API request leaves the download unavailable and preserves the guides and Releases link. The app’s official download filename stays `Print-at-SoC-Universal.dmg` across stable releases.
 
 ## Prepare a public app release
 
@@ -21,6 +21,8 @@ The home page queries GitHub’s public latest-release API. It enables the downl
 
 Local production packaging requires the same manual-validation gate plus a Developer ID identity and notarytool Keychain profile. `MODE=development VERSION=1.0.0 ./scripts/build-macos-app.sh` is for maintainer review only.
 
-## Current status
+## Unsigned v1 release — 8 October 2026
 
-The validation record is deliberately incomplete. Developer ID credentials are unavailable on the development Mac. A signed public v1 DMG cannot be produced yet. The source and guide website can be published independently; they must not imply the app has passed the outstanding release checks.
+The maintainer reports thorough testing and explicitly authorized publication without Apple signing. Build this release using `MODE=unsigned VERSION=1.0.0 ./scripts/build-macos-app.sh`. This mode packages the normal app name and bundle identifier, uses ad-hoc signing, scans the bundle, and writes the DMG checksum. It includes a signing-status notice and does not claim Developer ID, notarization, or Gatekeeper acceptance.
+
+Create a draft `v1.0.0` release at the exact source commit, upload `Print-at-SoC-Universal.dmg`, its `.sha256` file, and `release-validation.json`, verify uploaded digests, then publish it as latest. Keep the maintainer attestation distinct from independently observed device-specific checks. The signed production workflow above remains available and requires all its original signing and validation gates.
