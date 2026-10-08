@@ -15,6 +15,7 @@ h2{font-size:24px;line-height:1.4;margin:32px 0 15px;font-weight:650}h3{font-siz
 .download-page{display:block;max-width:760px;padding-top:52px;padding-bottom:56px}.download-page article{max-width:none}
 .download-heading{display:flex;align-items:center;gap:16px;margin-bottom:24px}.download-heading img{width:48px;height:48px}.download-heading h1{margin:0;font-size:32px}
 .download-description{font-size:18px;line-height:1.65;max-width:650px;margin-bottom:32px}
+.current-release{font-size:13px;color:var(--muted);margin-bottom:12px}
 .platform-list{border-top:1px solid var(--line);margin-bottom:20px}
 .platform-row{display:flex;align-items:center;justify-content:space-between;gap:28px;padding:26px 0;border-bottom:1px solid var(--line)}
 .platform-row h2{font-size:20px;margin:0 0 5px;letter-spacing:-.2px}.platform-row p{font-size:14px;color:var(--muted);margin:0}.availability{font-size:12px;font-weight:500;letter-spacing:0;color:var(--link);margin-left:10px;white-space:nowrap}

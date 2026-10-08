@@ -18,5 +18,6 @@
       const result=publishedDownload(release);if(!result||result.version==='v1.0.0')return;
       const link=document.createElement('a');link.id='download';link.className='download-button';link.href=result.download;link.textContent='Download for macOS';
       document.getElementById('download').replaceWith(link);
+      document.getElementById('current-release').textContent='Current release: '+result.version;
     }).catch(()=>{/* The published v1 download remains usable if the API is unavailable. */});
 })(typeof globalThis!=='undefined'?globalThis:this);
