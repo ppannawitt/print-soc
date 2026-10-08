@@ -12,14 +12,12 @@
   }
   root.PrintSoCRelease={publishedDownload};
   if(!root.document)return;
-  const status=document.getElementById('release-status');
   fetch('https://api.github.com/repos/ppannawitt/print-soc/releases/latest',{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(8000)})
     .then(response=>{if(response.status===404)return null;if(!response.ok)throw new Error('unavailable');return response.json();})
     .then(release=>{
       const result=publishedDownload(release);if(!result||result.version==='v1.0.0')return;
       const link=document.createElement('a');link.id='download';link.className='download-button';link.href=result.download;link.textContent='Download '+result.version+' for macOS';
       document.getElementById('download').replaceWith(link);
-      status.textContent=result.version+' · Universal Mac app. See release notes for signing status.';
       const checksum=document.getElementById('checksum');checksum.href=result.checksum;checksum.textContent='SHA-256 checksum';checksum.hidden=false;
     }).catch(()=>{/* The published v1 download remains usable if the API is unavailable. */});
 })(typeof globalThis!=='undefined'?globalThis:this);

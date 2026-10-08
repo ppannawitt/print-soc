@@ -24,9 +24,9 @@ test('all website pages have valid local navigation, language and accessible mai
     }
   }
 });
-test('published v1 has a direct download, checksum and truthful signing notice',()=>{
+test('published v1 has a direct Mac download, checksum and Windows coming soon',()=>{
   const home=fs.readFileSync(new URL('index.html',site),'utf8');
-  assert.ok(home.includes('Available now'));assert.ok(home.includes('Not Apple-notarized'));
+  assert.ok(home.includes('Available now'));assert.ok(home.includes('Windows — coming soon'));
   assert.ok(home.includes('href="'+prefix+'Print-at-SoC-Universal.dmg"'));
   assert.ok(home.includes('href="'+prefix+'Print-at-SoC-Universal.dmg.sha256"'));
   assert.doesNotMatch(home, /V1 is being prepared|<button id="download"|<a[^>]*>GitHub<\/a>/);
