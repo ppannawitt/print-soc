@@ -1,6 +1,6 @@
 {
   "name": "socprint-ui-reference",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Go-based NUS SoC print CLI with an archived Node UI reference",

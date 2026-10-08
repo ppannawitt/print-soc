@@ -5,17 +5,17 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>socprint</string>
+  <string>SimplyPrint</string>
   <key>CFBundleIconFile</key>
-  <string>socprint.icns</string>
+  <string>SimplyPrint.icns</string>
   <key>CFBundleIdentifier</key>
   <string>edu.nus.soc.socprint</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Print @ SoC</string>
+  <string>SimplyPrint @ SoC</string>
   <key>CFBundleDisplayName</key>
-  <string>Print @ SoC</string>
+  <string>SimplyPrint @ SoC</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleSignature</key>
@@ -25,9 +25,9 @@
     <string>MacOSX</string>
   </array>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>1.0.1</string>
   <key>CFBundleVersion</key>
-  <string>100</string>
+  <string>101</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.productivity</string>
   <key>LSMinimumSystemVersion</key>

@@ -227,7 +227,7 @@ static size_t SPWrite(void *info,const void *buffer,size_t count) {
 }
 - (void)close {
     [_documents removeAllObjects];[_prepared removeAllObjects];
-    if(_directory){NSError *error=nil;if(![[NSFileManager defaultManager] removeItemAtPath:_directory error:&error]&&error.code!=NSFileNoSuchFileError)NSLog(@"Print @ SoC: temporary PDF cleanup failed; recovery will retry on next launch.");_directory=nil;}
+    if(_directory){NSError *error=nil;if(![[NSFileManager defaultManager] removeItemAtPath:_directory error:&error]&&error.code!=NSFileNoSuchFileError)NSLog(@"SimplyPrint @ SoC: temporary PDF cleanup failed; recovery will retry on next launch.");_directory=nil;}
     if(_lock>=0){close(_lock);_lock=-1;}
 }
 - (void)dealloc { [self close]; }

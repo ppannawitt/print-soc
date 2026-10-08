@@ -45,3 +45,9 @@ Automatic SSH-key registration has been removed from the frontend, native bridge
 The GitHub Pages website has download, printing, and manual SSH-key guide pages. The v1 download links to the published universal DMG and checksum and discloses its unsigned/not-notarized status. Production packaging also rejects an incomplete or outdated manual validation record. The GitHub production workflow requires signing/notarization secrets and all recorded checks; it never falls back to a development artifact.
 
 The maintainer reports thorough testing and explicitly authorized unsigned v1 publication on 8 October 2026. The device-specific checks listed above have not been independently observed by the agent; the maintainer statement is recorded separately rather than inventing per-device evidence. V1 is ad-hoc signed, not Developer ID signed or Apple-notarized, and Gatekeeper acceptance is not asserted. The discontinued key-service integration is outside v1 and no longer a release gate.
+
+## V1.0.1 packaging correction — 8 October 2026
+
+The original v1.0.0 executable contained `LC_BUILD_VERSION minos 26.0` on both architectures even though Info.plist advertised macOS 13.0. Compiler flags alone did not constrain the final external link. V1.0.1 explicitly sets the deployment target for compilation and linking. Packaging now inspects both Mach-O slices and rejects any minimum OS version other than 13.0 before publication. This corrects an actual compatibility bug; it does not independently prove runtime behavior on an older Mac or Intel device.
+
+The app bundle, native menus, embedded UI and DMG are renamed SimplyPrint @ SoC. Bundle ID, credential service names and settings/history paths remain compatible. The disk image root contains only the app bundle. Dependency notices stay inside the app bundle; opening guidance and signing information stay on the website and release notes. The release remains ad-hoc signed and not Apple-notarized.

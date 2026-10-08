@@ -9,6 +9,10 @@ permissions:
 jobs:
   mac-checks:
     runs-on: macos-latest
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      CGO_CFLAGS: "-mmacosx-version-min=13.0"
+      CGO_LDFLAGS: "-mmacosx-version-min=13.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -32,8 +36,8 @@ jobs:
         run: MODE=development ./scripts/build-macos-app.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: Print-at-SoC-Universal-Development
+          name: SimplyPrint-at-SoC-Universal-Development
           path: |
-            dist/Print-at-SoC-Universal-Development.dmg
-            dist/Print-at-SoC-Universal-Development.dmg.sha256
+            dist/SimplyPrint-at-SoC-Universal-Development.dmg
+            dist/SimplyPrint-at-SoC-Universal-Development.dmg.sha256
             docs/RELEASE-READINESS.md

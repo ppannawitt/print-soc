@@ -48,7 +48,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
         NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
     self.window = [[NSWindow alloc] initWithContentRect:frame styleMask:style
         backing:NSBackingStoreBuffered defer:NO];
-    self.window.title = @"Print @ SoC";
+    self.window.title = @"SimplyPrint @ SoC";
     self.window.minSize = NSMakeSize(820, 600);
     [self.window center];
 
@@ -80,12 +80,12 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
 - (void)installMenu {
     NSMenu *menu=[[NSMenu alloc] initWithTitle:@""];
     NSMenuItem *appItem=[[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
-    NSMenu *appMenu=[[NSMenu alloc] initWithTitle:@"Print @ SoC"];
-    NSMenuItem *about=[appMenu addItemWithTitle:@"About Print @ SoC" action:@selector(showAbout:) keyEquivalent:@""];about.target=self;
+    NSMenu *appMenu=[[NSMenu alloc] initWithTitle:@"SimplyPrint @ SoC"];
+    NSMenuItem *about=[appMenu addItemWithTitle:@"About SimplyPrint @ SoC" action:@selector(showAbout:) keyEquivalent:@""];about.target=self;
     [appMenu addItem:NSMenuItem.separatorItem];
     NSMenuItem *settings=[appMenu addItemWithTitle:@"Account Settings…" action:@selector(showSettings:) keyEquivalent:@","];settings.target=self;
     [appMenu addItem:NSMenuItem.separatorItem];
-    [appMenu addItemWithTitle:@"Quit Print @ SoC" action:@selector(terminate:) keyEquivalent:@"q"];
+    [appMenu addItemWithTitle:@"Quit SimplyPrint @ SoC" action:@selector(terminate:) keyEquivalent:@"q"];
     appItem.submenu=appMenu;[menu addItem:appItem];
     NSMenuItem *fileItem=[[NSMenuItem alloc] initWithTitle:@"File" action:nil keyEquivalent:@""];
     NSMenu *file=[[NSMenu alloc] initWithTitle:@"File"];
@@ -110,7 +110,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
 - (void)printDocument:(id)sender { [self sendCommand:@"print"]; }
 - (void)showSettings:(id)sender { [self sendCommand:@"settings"]; }
 - (void)showAbout:(id)sender {
-    [NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionApplicationName:@"Print @ SoC",NSAboutPanelOptionApplicationVersion:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],@"Copyright":@"Independent student project · No telemetry"}];
+    [NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionApplicationName:@"SimplyPrint @ SoC",NSAboutPanelOptionApplicationVersion:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],@"Copyright":@"Independent student project · No telemetry"}];
 }
 - (void)applicationWillTerminate:(NSNotification *)notification {
     dispatch_sync(self.pdfQueue, ^{ [self.pdf close]; });
@@ -137,7 +137,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
 - (void)webView:(WKWebView *)webView runJavaScriptAlertPanelWithMessage:(NSString *)message
     initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(void))completionHandler {
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = @"Print @ SoC";
+    alert.messageText = @"SimplyPrint @ SoC";
     alert.informativeText = message ?: @"";
     alert.alertStyle = NSAlertStyleInformational;
     [alert addButtonWithTitle:@"OK"];
@@ -165,7 +165,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
     defaultText:(NSString *)defaultText initiatedByFrame:(WKFrameInfo *)frame
     completionHandler:(void (^)(NSString *result))completionHandler {
     NSAlert *alert = [[NSAlert alloc] init];
-    alert.messageText = @"Print @ SoC";
+    alert.messageText = @"SimplyPrint @ SoC";
     alert.informativeText = prompt ?: @"";
     alert.alertStyle = NSAlertStyleInformational;
     NSTextField *input = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 300, 24)];
@@ -195,7 +195,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
     }
     if ([action isEqualToString:@"nativeAlert"]) {
         NSAlert *alert = [[NSAlert alloc] init];
-        NSString *title = [body[@"Title"] isKindOfClass:[NSString class]] ? body[@"Title"] : @"Print @ SoC";
+        NSString *title = [body[@"Title"] isKindOfClass:[NSString class]] ? body[@"Title"] : @"SimplyPrint @ SoC";
         NSString *informativeText = [body[@"Message"] isKindOfClass:[NSString class]] ? body[@"Message"] : @"";
         NSString *style = [body[@"Style"] isKindOfClass:[NSString class]] ? body[@"Style"] : @"info";
         alert.messageText = title;

@@ -10,7 +10,7 @@ while raw.strip():
     module=package.get('Module');
     if module and module not in modules:modules.append(module)
     raw=raw.lstrip()[end:]
-parts=['Print @ SoC — License and third-party software notices\nVersions correspond to the modules used by the Mac executable.\n', pathlib.Path('LICENSE').read_text(), pathlib.Path(subprocess.check_output(['go','env','GOROOT'],text=True).strip(),'LICENSE').read_text()]
+parts=['SimplyPrint @ SoC — License and third-party software notices\nVersions correspond to the modules used by the Mac executable.\n', pathlib.Path('LICENSE').read_text(), pathlib.Path(subprocess.check_output(['go','env','GOROOT'],text=True).strip(),'LICENSE').read_text()]
 for module in modules:
     if module.get('Main'):continue
     path=pathlib.Path(module.get('Dir',''))

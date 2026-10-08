@@ -4,13 +4,15 @@ SimplyPrint @ SoC provides a hassle-free experience with SoC printing without yo
 
 ## Download
 
-[Download for macOS](https://github.com/ppannawitt/print-soc/releases/download/v1.0.0/Print-at-SoC-Universal.dmg)
+[Download for macOS](https://github.com/ppannawitt/print-soc/releases/download/v1.0.1/SimplyPrint-at-SoC-Universal.dmg)
 
 Requires macOS 13 or later. Works on Apple Silicon and Intel Macs. Windows is coming soon.
 
 1. Open the downloaded DMG.
 2. Drag the app into **Applications**.
-3. Open the app from **Applications**.
+3. Open **SimplyPrint @ SoC** from **Applications**.
+
+If macOS says the developer cannot be verified, first try opening the app, then go to **System Settings → Privacy & Security → Open Anyway**. Review the app name and choose **Open**. Follow [Apple’s opening guide](https://support.apple.com/en-gb/102445) if needed.
 
 ## Set up your account
 

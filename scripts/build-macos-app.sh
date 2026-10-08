@@ -2,7 +2,7 @@
 set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${MODE:-development}"
-version="${VERSION:-1.0.0}"
+version="${VERSION:-1.0.1}"
 output_dir="${OUTPUT_DIR:-$project_root/dist}"
 go_command="${GO:-$(command -v go || true)}"
 if [[ -z "$go_command" && -x /usr/local/go/bin/go ]]; then go_command=/usr/local/go/bin/go; fi
@@ -20,29 +20,30 @@ fi
 build_work="$(mktemp -d "${TMPDIR:-/tmp}/socprint-build.XXXXXX")"
 trap 'rm -rf "$build_work"' EXIT
 mkdir -p "$output_dir" "$build_work/stage"
-app_name='Print @ SoC'
-asset_name='Print-at-SoC-Universal'
-if [[ "$mode" == development ]]; then app_name='Print @ SoC (Development)'; asset_name='Print-at-SoC-Universal-Development'; fi
+app_name='SimplyPrint @ SoC'
+asset_name='SimplyPrint-at-SoC-Universal'
+if [[ "$mode" == development ]]; then app_name='SimplyPrint @ SoC (Development)'; asset_name='SimplyPrint-at-SoC-Universal-Development'; fi
 app="$build_work/$app_name.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$project_root/macos/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 100' "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 101' "$app/Contents/Info.plist"
 if [[ "$mode" == development ]]; then
-  /usr/libexec/PlistBuddy -c 'Set :CFBundleName Print @ SoC (Development)' "$app/Contents/Info.plist"
-  /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Print @ SoC (Development)' "$app/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleName SimplyPrint @ SoC (Development)' "$app/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName SimplyPrint @ SoC (Development)' "$app/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier edu.nus.soc.socprint.development' "$app/Contents/Info.plist"
 fi
 printf 'APPL????' > "$app/Contents/PkgInfo"
 cd "$project_root"
 for arch in arm64 amd64; do
   clang_arch=arm64; if [[ "$arch" == amd64 ]]; then clang_arch=x86_64; fi
-  GOCACHE="${GOCACHE:-$build_work/go-cache}" CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" CC="clang -arch $clang_arch" \
+  MACOSX_DEPLOYMENT_TARGET=13.0 CGO_CFLAGS="${CGO_CFLAGS:-} -mmacosx-version-min=13.0" CGO_LDFLAGS="${CGO_LDFLAGS:-} -mmacosx-version-min=13.0" \
+    GOCACHE="${GOCACHE:-$build_work/go-cache}" CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" CC="clang -arch $clang_arch" \
     "$go_command" build -trimpath -ldflags='-s -w' -o "$build_work/socprint-$arch" ./cmd/socprint-macos
 done
-lipo -create "$build_work/socprint-arm64" "$build_work/socprint-amd64" -output "$app/Contents/MacOS/socprint"
+lipo -create "$build_work/socprint-arm64" "$build_work/socprint-amd64" -output "$app/Contents/MacOS/SimplyPrint"
 clang -fobjc-arc -framework Cocoa macos/icon.m -o "$build_work/make-icon"
-"$build_work/make-icon" "$build_work/socprint.iconset" "$build_work/icon-preview.png" "$app/Contents/Resources/socprint.icns"
+"$build_work/make-icon" "$build_work/socprint.iconset" "$build_work/icon-preview.png" "$app/Contents/Resources/SimplyPrint.icns"
 ./scripts/dependency-notices.sh "$app/Contents/Resources/Third-Party-Notices.txt"
 if [[ "$mode" == production ]]; then
   codesign --force --sign "$DEVELOPER_ID" --options runtime --timestamp "$app"
@@ -54,17 +55,11 @@ if [[ "$mode" == production ]]; then
   spctl --assess --type execute --verbose=2 "$app"
 else
   codesign --force --sign - --timestamp=none "$app"
-  if [[ "$mode" == unsigned ]]; then
-    printf 'Print @ SoC v%s\nAd-hoc signed. Not Developer ID signed or Apple-notarized. macOS may require approval to open.\n' "$version" > "$build_work/stage/Signing-Status.txt"
-  else
-    printf 'DEVELOPMENT BUILD\nAd-hoc signed. Not notarized.\n' > "$build_work/stage/Development-Build.txt"
-  fi
+
 fi
 codesign --verify --strict "$app"
 python3 "$project_root/scripts/check-macos-artifact.py" "$app"
 ditto "$app" "$build_work/stage/$app_name.app"
-ln -s /Applications "$build_work/stage/Applications"
-cp "$project_root/docs/RELEASE-READINESS.md" "$build_work/stage/Release-Readiness.txt"
 dmg="$build_work/$asset_name.dmg"
 hdiutil create -volname "$app_name" -srcfolder "$build_work/stage" -ov -format UDZO "$dmg"
 if [[ "$mode" == production ]]; then

@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "source_sha256": "e6ff1e6ab8fc4c0a87bf586944712c1c1604e05b31640f4373638d239e2b0934",
+  "version": "1.0.1",
+  "source_sha256": "fb46b5a1adb84a8fcaccb103ba611a0a409df07f7252a9037cecdf281e830c40",
   "checks": {
     "apple_silicon_install_upgrade": {
       "passed": false,
@@ -31,12 +31,24 @@
     "mode": "unsigned",
     "developer_id_signed": false,
     "apple_notarized": false,
-    "gatekeeper_accepted": null
+    "gatekeeper_accepted": false
   },
   "maintainer_attestation": {
     "date": "2026-10-08",
     "testing_statement": "I have tested thoroughly, just publish now",
     "publication_authorization": "Not required to be apple sign just release",
-    "coverage_note": "The maintainer reports thorough testing. Specific device and accessibility checks have not been independently observed; the per-check signed-production evidence remains incomplete."
+    "coverage_note": "Prior maintainer testing and authorization are retained. No new device-specific coverage is claimed for v1.0.1; signed-production per-check evidence remains incomplete."
+  },
+  "automated_checks": {
+    "go_race_tests": "passed",
+    "go_vet": "passed",
+    "native_pdf_bridge_frontend_tests": "passed",
+    "website_tests": "passed",
+    "dependency_scan": "no reachable or imported-package findings; retained unimported OpenPGP advisory",
+    "app_only_dmg_contents": "passed",
+    "arm64_minimum_macos": "13.0",
+    "x86_64_minimum_macos": "13.0",
+    "local_launch": "passed",
+    "local_launch_macos": "26.6.2"
   }
 }

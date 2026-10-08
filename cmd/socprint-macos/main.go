@@ -2,7 +2,7 @@ package main
 
 /*
 #cgo darwin CFLAGS: -fobjc-arc -fblocks -mmacosx-version-min=13.0
-#cgo darwin LDFLAGS: -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers -framework LocalAuthentication -framework PDFKit
+#cgo darwin LDFLAGS: -mmacosx-version-min=13.0 -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers -framework LocalAuthentication -framework PDFKit
 #include <stdlib.h>
 void socprint_run(const char *html);
 void socprint_respond(const char *response);
@@ -121,7 +121,7 @@ func main() {
 }
 
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "Print @ SoC:", err)
+	fmt.Fprintln(os.Stderr, "SimplyPrint @ SoC:", err)
 	os.Exit(1)
 }
 
@@ -191,7 +191,7 @@ func (a *application) handle(request uiRequest) {
 		termsAccepted := a.settings.TermsVersion == config.TermsVersion
 		a.mu.Unlock()
 		if !termsAccepted {
-			respond(failure(request.ID, "termsRequired", "Review and accept the Disclaimer and Terms of Use before using Print @ SoC.", nil))
+			respond(failure(request.ID, "termsRequired", "Review and accept the Disclaimer and Terms of Use before using SimplyPrint @ SoC.", nil))
 			return
 		}
 	}
@@ -246,7 +246,7 @@ func (a *application) acceptTerms(id, version string) uiResponse {
 	a.mu.Unlock()
 	settings.TermsVersion = config.TermsVersion
 	if err := config.Save(settings); err != nil {
-		return failure(id, "termsSaveFailed", "Print @ SoC could not save your acceptance on this Mac.", nil)
+		return failure(id, "termsSaveFailed", "SimplyPrint @ SoC could not save your acceptance on this Mac.", nil)
 	}
 	a.mu.Lock()
 	a.settings = settings
@@ -362,7 +362,7 @@ func (a *application) saveCredentials(request uiRequest) uiResponse {
 		(request.Password != "" && request.Password != oldPassword) ||
 		(request.KeyPassphrase != "" && request.KeyPassphrase != oldKeyPassphrase)
 	if err := config.Save(settings); err != nil {
-		return failure(request.ID, "settingsFailed", "Print @ SoC could not save the account settings on this Mac.", nil)
+		return failure(request.ID, "settingsFailed", "SimplyPrint @ SoC could not save the account settings on this Mac.", nil)
 	}
 	vaultWarning := ""
 	passwordSaved := hasPassword(username)
@@ -491,7 +491,7 @@ func (a *application) signIn(id, username, password, keyPath, keyPassphrase stri
 	}
 	client, err := transport.New(username, password, keyPath, printers, keyPassphrase)
 	if err != nil {
-		return failure(id, "signInFailed", "Print @ SoC could not prepare a secure connection. Review the account settings and try again.", nil)
+		return failure(id, "signInFailed", "SimplyPrint @ SoC could not prepare a secure connection. Review the account settings and try again.", nil)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -606,15 +606,15 @@ func (a *application) createKey(id, passphrase string) uiResponse {
 	}
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return failure(id, "keyCreateFailed", "Print @ SoC could not generate an SSH key.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not generate an SSH key.", nil)
 	}
-	block, err := ssh.MarshalPrivateKeyWithPassphrase(private, "Print @ SoC "+username, []byte(passphrase))
+	block, err := ssh.MarshalPrivateKeyWithPassphrase(private, "SimplyPrint @ SoC "+username, []byte(passphrase))
 	if err != nil {
-		return failure(id, "keyCreateFailed", "Print @ SoC could not encrypt the SSH key.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not encrypt the SSH key.", nil)
 	}
 	directory, err := config.Directory()
 	if err != nil {
-		return failure(id, "keyCreateFailed", "Print @ SoC could not create its secure settings folder.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not create its secure settings folder.", nil)
 	}
 	safeUser := regexp.MustCompile("[^a-zA-Z0-9_.-]").ReplaceAllString(username, "_")
 	if safeUser == "" || safeUser == "." || safeUser == ".." {
@@ -633,26 +633,26 @@ func (a *application) createKey(id, passphrase string) uiResponse {
 		}
 	}
 	if err != nil {
-		return failure(id, "keyCreateFailed", "Print @ SoC could not create a private key file in its secure folder.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not create a private key file in its secure folder.", nil)
 	}
 	if _, err := file.Write(pem.EncodeToMemory(block)); err != nil {
 		_ = file.Close()
 		_ = os.Remove(keyPath)
-		return failure(id, "keyCreateFailed", "Print @ SoC could not save the private key.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not save the private key.", nil)
 	}
 	if err := file.Close(); err != nil {
 		_ = os.Remove(keyPath)
-		return failure(id, "keyCreateFailed", "Print @ SoC could not finish saving the private key.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not finish saving the private key.", nil)
 	}
 	sshPublic, err := ssh.NewPublicKey(public)
 	if err != nil {
 		_ = os.Remove(keyPath)
-		return failure(id, "keyCreateFailed", "Print @ SoC could not prepare the public key.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not prepare the public key.", nil)
 	}
 	settings.KeyPath = keyPath
 	if err := config.Save(settings); err != nil {
 		_ = os.Remove(keyPath)
-		return failure(id, "keyCreateFailed", "Print @ SoC could not save the key location.", nil)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not save the key location.", nil)
 	}
 	vaultWarning := ""
 	if err := credentials.SetPassphrase(username, passphrase); err != nil {
@@ -731,7 +731,7 @@ func (a *application) useKey(request uiRequest) uiResponse {
 	a.settings = settings
 	a.mu.Unlock()
 	if err := config.Save(settings); err != nil {
-		return failure(request.ID, "settingsFailed", "Print @ SoC could not save the SSH key location.", nil)
+		return failure(request.ID, "settingsFailed", "SimplyPrint @ SoC could not save the SSH key location.", nil)
 	}
 	return a.signIn(request.ID, request.Username, request.Password, request.KeyPath, request.KeyPassphrase)
 }
@@ -739,7 +739,7 @@ func (a *application) useKey(request uiRequest) uiResponse {
 func (a *application) validateFile(id, path string) uiResponse {
 	file, err := os.Open(path)
 	if err != nil {
-		return failure(id, "fileUnreadable", "Print @ SoC could not read that file. Choose it again.", nil)
+		return failure(id, "fileUnreadable", "SimplyPrint @ SoC could not read that file. Choose it again.", nil)
 	}
 	defer file.Close()
 	stat, err := file.Stat()
@@ -809,7 +809,7 @@ func (a *application) submitPrint(request uiRequest) uiResponse {
 	}
 	operationID, err := newOperationID()
 	if err != nil {
-		return failure(request.ID, "operationFailed", "Print @ SoC could not prepare a safe print operation.", nil)
+		return failure(request.ID, "operationFailed", "SimplyPrint @ SoC could not prepare a safe print operation.", nil)
 	}
 	job := store.Job{
 		ID: operationID, Username: username, Host: transport.UnixHost,
@@ -817,7 +817,7 @@ func (a *application) submitPrint(request uiRequest) uiResponse {
 		Queue: request.Queue, SubmittedAt: time.Now().UTC(), State: "pending", PrintSettings: string(request.PrintSettings),
 	}
 	if err := a.history.AddPending(context.Background(), job); err != nil {
-		return failure(request.ID, "historyFailed", "Print @ SoC could not save this operation before sending it.", nil)
+		return failure(request.ID, "historyFailed", "SimplyPrint @ SoC could not save this operation before sending it.", nil)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -883,7 +883,7 @@ func (a *application) listJobs(id string, refresh bool) uiResponse {
 	defer cancel()
 	jobs, err := a.history.List(ctx, 100)
 	if err != nil {
-		return failure(id, "historyFailed", "Print @ SoC could not read local job history.", nil)
+		return failure(id, "historyFailed", "SimplyPrint @ SoC could not read local job history.", nil)
 	}
 	if refresh && client != nil && username != "" {
 		queues := make(map[string]bool)
@@ -956,7 +956,7 @@ func (a *application) queue(id, queue string) uiResponse {
 	defer cancel()
 	snapshot, err := client.Queue(ctx, queue)
 	if err != nil {
-		return failure(id, "queueFailed", "Print @ SoC could not refresh this queue. Check your connection and try again.", nil)
+		return failure(id, "queueFailed", "SimplyPrint @ SoC could not refresh this queue. Check your connection and try again.", nil)
 	}
 	jobs := make([]map[string]any, 0, len(snapshot.Jobs))
 	for _, job := range snapshot.Jobs {
@@ -983,7 +983,7 @@ func (a *application) cancelJob(id, operationID string) uiResponse {
 	defer cancel()
 	jobs, err := a.history.List(ctx, 100)
 	if err != nil {
-		return failure(id, "historyFailed", "Print @ SoC could not read local job history.", nil)
+		return failure(id, "historyFailed", "SimplyPrint @ SoC could not read local job history.", nil)
 	}
 	var selected *store.Job
 	for i := range jobs {
@@ -1030,7 +1030,7 @@ func (a *application) signOut(id string, forget bool) uiResponse {
 		settings.Username = username
 	}
 	if err := config.Save(settings); err != nil {
-		return failure(id, "settingsFailed", "Signed out, but Print @ SoC could not save the account setting.", nil)
+		return failure(id, "settingsFailed", "Signed out, but SimplyPrint @ SoC could not save the account setting.", nil)
 	}
 	a.mu.Lock()
 	a.settings, a.username = settings, settings.Username

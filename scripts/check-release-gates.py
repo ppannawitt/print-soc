@@ -39,7 +39,7 @@ def validate(record, version):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fingerprint', action='store_true')
-    parser.add_argument('--version', default='1.0.0')
+    parser.add_argument('--version', default='1.0.1')
     args = parser.parse_args()
     if args.fingerprint:
         print(source_fingerprint())

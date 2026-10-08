@@ -1,14 +1,16 @@
-Print @ SoC for macOS 13 or later, with one universal app for Apple Silicon and Intel.
+SimplyPrint @ SoC v1.0.1 for macOS 13 or later, on Apple Silicon and Intel.
 
-- PDF preview, page selection, scaling, orientation, and pages per sheet.
-- Printer directory, local print history, live queues, and owned-job cancellation.
-- Green interface, system appearance, and native macOS alerts.
-- Local SSH-key creation and public-key copying. Register keys manually with SoC; automatic registration is removed.
+- Corrects a packaging error in v1.0.0 that made the executable require macOS 26 despite advertising macOS 13 support.
+- Renames the app, window, menus, About panel and disk image to SimplyPrint @ SoC.
+- The DMG contains only `SimplyPrint @ SoC.app`; no loose text files or Applications shortcut.
+- Existing settings, Keychain credentials and print history remain compatible.
 
-Download `Print-at-SoC-Universal.dmg`, verify its SHA-256 checksum, and drag the app into Applications. **Signing status:** ad-hoc signed, not Developer ID signed and not notarized by Apple. macOS may require approval to open the app.
+Download `SimplyPrint-at-SoC-Universal.dmg`, open it and drag the app into your Applications folder in Finder. Open the app from Applications.
 
-[Printing guide](https://ppannawitt.github.io/print-soc/printing.html) · [Manual SSH-key guide](https://ppannawitt.github.io/print-soc/ssh-keys.html)
+**Signing status:** ad-hoc signed, not Developer ID signed and not notarized by Apple. If macOS says the developer cannot be verified, first try opening the app, then go to System Settings → Privacy & Security → Open Anyway, review the app name and choose Open. Follow [Apple’s opening guide](https://support.apple.com/en-gb/102445). Do not override a malware or damaged-app warning.
 
-The maintainer reports thorough testing and has authorized this unsigned v1 release. Automated checks passed; detailed hardware/accessibility coverage has not been independently verified.
+[Printing guide](https://ppannawitt.github.io/print-soc/printing.html) · [Manual SSH-key setup](https://ppannawitt.github.io/print-soc/ssh-keys.html)
 
-An independent student project, not an official NUS application. A SoC account and Unix access are required. PDFs are uploaded to SoC for printing. Credentials and history stay on the Mac; there is no telemetry. A successful submission does not confirm physical printing. Check the queue before repeating a job with an unknown outcome.
+Printing features include PDF preview and layout settings, a printer directory, jobs, queues, and owned-job cancellation. SSH-key registration remains manual. This is an independent student project, not an official NUS application.
+
+Both executable slices and the app bundle now declare macOS 13.0. Automated checks and a local launch are verified; older macOS and physical Intel runtime checks have not been independently verified. The maintainer has authorized publication without Apple signing. The DMG checksum and release validation record are separate release assets.

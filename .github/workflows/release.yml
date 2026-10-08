@@ -3,10 +3,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (for example 1.0.0)'
+        description: 'Version to release (for example 1.0.1)'
         type: string
         required: true
-        default: '1.0.0'
+        default: '1.0.1'
 permissions:
   contents: read
 concurrency:
@@ -20,6 +20,9 @@ jobs:
     permissions:
       contents: write
     env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      CGO_CFLAGS: "-mmacosx-version-min=13.0"
+      CGO_LDFLAGS: "-mmacosx-version-min=13.0"
       VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -81,8 +84,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp release/validation.json dist/release-validation.json
-          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft --title "Print @ SoC v$VERSION" --notes-file release/NOTES.md \
-            dist/Print-at-SoC-Universal.dmg dist/Print-at-SoC-Universal.dmg.sha256 dist/release-validation.json
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --draft --title "SimplyPrint @ SoC v$VERSION" --notes-file release/NOTES.md \
+            dist/SimplyPrint-at-SoC-Universal.dmg dist/SimplyPrint-at-SoC-Universal.dmg.sha256 dist/release-validation.json
       - name: Publish the verified release
         env:
           GH_TOKEN: ${{ github.token }}

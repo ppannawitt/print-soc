@@ -3,7 +3,7 @@
   const repo='https://github.com/ppannawitt/print-soc';
   function publishedDownload(release){
     if(!release||release.draft||release.prerelease||!/^v\d+\.\d+\.\d+$/.test(release.tag_name)||!Array.isArray(release.assets))return null;
-    const names=['Print-at-SoC-Universal.dmg','Print-at-SoC-Universal.dmg.sha256','release-validation.json'];
+    const names=['SimplyPrint-at-SoC-Universal.dmg','SimplyPrint-at-SoC-Universal.dmg.sha256','release-validation.json'];
     const assets=names.map(name=>release.assets.find(a=>a.name===name&&a.state==='uploaded'&&a.size>0));
     if(assets.some(a=>!a))return null;
     const prefix=repo+'/releases/download/'+release.tag_name+'/';
@@ -15,7 +15,7 @@
   fetch('https://api.github.com/repos/ppannawitt/print-soc/releases/latest',{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(8000)})
     .then(response=>{if(response.status===404)return null;if(!response.ok)throw new Error('unavailable');return response.json();})
     .then(release=>{
-      const result=publishedDownload(release);if(!result||result.version==='v1.0.0')return;
+      const result=publishedDownload(release);if(!result||result.version==='v1.0.1')return;
       const link=document.createElement('a');link.id='download';link.className='download-button';link.href=result.download;link.textContent='Download for macOS';
       document.getElementById('download').replaceWith(link);
       document.getElementById('current-release').textContent='Current release: '+result.version;
