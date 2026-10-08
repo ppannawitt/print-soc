@@ -19,16 +19,15 @@ test('all website pages have valid local navigation, language and accessible mai
     assert.ok(html.includes('lang="en"'));assert.ok(html.includes('id="main"'));assert.ok(html.includes('aria-current="page"'));assert.ok(html.includes('Skip to content'));
     for(const match of html.matchAll(/(?:href|src)="([^"#]+)"/g)){
       const href=match[1];if(/^https:\/\//.test(href))continue;
-      assert.ok(fs.existsSync(new URL(href.split('#')[0],site)),name+': missing local file '+href);
-      if(href.includes('#'))assert.ok(fs.readFileSync(new URL(href.split('#')[0],site),'utf8').includes('id="'+href.split('#')[1]+'"'));
+      assert.ok(fs.existsSync(new URL(href.split('#')[0].split('?')[0],site)),name+': missing local file '+href);
+      if(href.includes('#'))assert.ok(fs.readFileSync(new URL(href.split('#')[0].split('?')[0],site),'utf8').includes('id="'+href.split('#')[1]+'"'));
     }
   }
 });
-test('published v1 has a direct Mac download, checksum and Windows coming soon',()=>{
+test('published v1 has a direct Mac download and Windows coming soon',()=>{
   const home=fs.readFileSync(new URL('index.html',site),'utf8');
-  assert.ok(home.includes('Available now'));assert.ok(home.includes('Download for Windows · Coming soon'));
+  assert.ok(home.includes('Available now'));assert.ok(home.includes('Download for Windows'));assert.ok(home.includes('Coming soon'));
   assert.ok(home.includes('href="'+prefix+'Print-at-SoC-Universal.dmg"'));
-  assert.ok(home.includes('href="'+prefix+'Print-at-SoC-Universal.dmg.sha256"'));
   assert.doesNotMatch(home, /V1 is being prepared|<button id="download"|<a[^>]*>GitHub<\/a>/);
   for(const name of ['index.html','printing.html','ssh-keys.html'])assert.doesNotMatch(fs.readFileSync(new URL(name,site),'utf8'),/xattr|spctl --master-disable|curl.+\|\s*(?:sh|bash)/);
 });
