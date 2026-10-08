@@ -12,7 +12,7 @@ CHECKS = ('apple_silicon_install_upgrade', 'intel_install_upgrade', 'macos_13',
 
 
 def source_fingerprint():
-    files = [p for directory in ('cmd', 'internal', 'macos', 'scripts', 'tests')
+    files = [p for directory in ('cmd', 'internal', 'macos', 'scripts', 'tests', '.github/workflows')
              for p in (ROOT / directory).rglob('*') if p.is_file()]
     files.extend(ROOT / name for name in ('go.mod', 'go.sum'))
     digest = hashlib.sha256()
