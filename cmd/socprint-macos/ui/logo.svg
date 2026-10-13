@@ -1,1 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="a" x2=".8" y2="1"><stop stop-color="#33956c"/><stop offset="1" stop-color="#17583f"/></linearGradient></defs><rect x="4" y="4" width="120" height="120" rx="28" fill="url(#a)"/><path d="M34 56a15 15 0 0 1 2-30 23 23 0 0 1 43-1 15 15 0 1 1 12 31" fill="none" stroke="#eff9f3" stroke-width="7" stroke-linecap="round"/><rect x="29" y="57" width="70" height="36" rx="9" fill="#eff9f3"/><rect x="41" y="47" width="46" height="23" rx="3" fill="#eff9f3"/><rect x="40" y="80" width="48" height="29" rx="4" fill="#fff"/><path d="M50 90h28m-28 9h21" stroke="#99c7b0" stroke-width="4" stroke-linecap="round"/><circle cx="87" cy="69" r="3" fill="#33956c"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280">
+  <rect width="1280" height="1280" fill="#151515"/>
+  <rect x="79" y="94" width="1127" height="1127" rx="255" fill="#1B6048"/>
+  <path d="M274 244 C286 294 300 307 349 319 C300 331 286 344 274 394 C262 344 248 331 199 319 C248 307 262 294 274 244 Z" fill="#FFD166"/>
+  <g transform="rotate(-5.5 633 410)">
+    <rect x="420" y="244" width="426" height="350" rx="34" fill="#FFFFFF"/>
+    <text x="633" y="368" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-size="98" font-weight="700" fill="#1B6048">SoC</text>
+    <path d="M543 419 L595 452 L551 496" fill="none" stroke="#1B6048" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M629 486 L715 476" fill="none" stroke="#1B6048" stroke-width="20" stroke-linecap="round"/>
+  </g>
+  <rect x="248" y="545" width="789" height="413" rx="109" fill="#E5F4EB"/>
+  <circle cx="935" cy="619" r="26" fill="#FFD166"/>
+  <circle cx="492" cy="713" r="41" fill="#153F32"/>
+  <circle cx="503" cy="698" r="13" fill="#FFFFFF"/>
+  <circle cx="792" cy="713" r="41" fill="#153F32"/>
+  <circle cx="803" cy="698" r="13" fill="#FFFFFF"/>
+  <circle cx="409" cy="800" r="34" fill="#FFB1A3"/>
+  <circle cx="875" cy="800" r="34" fill="#FFB1A3"/>
+  <path d="M559 807 C586 833 610 851 643 851 C676 851 700 833 727 807" fill="none" stroke="#153F32" stroke-width="21" stroke-linecap="round"/>
+  <rect x="360" y="898" width="564" height="34" rx="17" fill="#1C6248"/>
+  <g transform="rotate(3 644 1019)">
+    <rect x="419" y="903" width="450" height="232" rx="24" fill="#FFFFFF"/>
+    <path d="M482 1038 L524 1040" fill="none" stroke="#9BCBB1" stroke-width="22" stroke-linecap="butt"/>
+  </g>
+</svg>

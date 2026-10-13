@@ -42,7 +42,7 @@ for arch in arm64 amd64; do
     "$go_command" build -trimpath -ldflags='-s -w' -o "$build_work/socprint-$arch" ./cmd/socprint-macos
 done
 lipo -create "$build_work/socprint-arm64" "$build_work/socprint-amd64" -output "$app/Contents/MacOS/SimplyPrint"
-clang -fobjc-arc -framework Cocoa macos/icon.m -o "$build_work/make-icon"
+clang -fobjc-arc -framework Cocoa -framework CoreText macos/icon.m -o "$build_work/make-icon"
 "$build_work/make-icon" "$build_work/socprint.iconset" "$build_work/icon-preview.png" "$app/Contents/Resources/SimplyPrint.icns"
 ./scripts/dependency-notices.sh "$app/Contents/Resources/Third-Party-Notices.txt"
 if [[ "$mode" == production ]]; then

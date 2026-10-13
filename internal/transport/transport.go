@@ -358,6 +358,9 @@ func (s *SSH) completeHandshake(connection net.Conn, address string, clientConfi
 		if errors.Is(err, ErrChangedHostKey) {
 			return nil, ErrChangedHostKey
 		}
+		if errors.Is(err, errJumpPasswordAuthentication) || errors.Is(err, errJumpAdditionalAuthentication) {
+			return nil, err
+		}
 		if strings.Contains(strings.ToLower(err.Error()), "unable to authenticate") {
 			return nil, ErrAuthentication
 		}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"socprint/internal/transport"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -69,7 +71,7 @@ func TestKeyUnlockErrorsDistinguishLocalKeyAndAccountAuthentication(t *testing.T
 	}
 }
 
-func TestMergeRegisteredJumpKeysPreservesEveryFingerprintAndRejectsExtras(t *testing.T) {
+func TestMergeRegisteredJumpKeysPreservesFingerprintsAndIgnoresUnregisteredLocalKeys(t *testing.T) {
 	selected := authorizedKeyFixture(t)
 	oldOne := authorizedKeyFixture(t)
 	oldTwo := authorizedKeyFixture(t)
@@ -83,19 +85,33 @@ func TestMergeRegisteredJumpKeysPreservesEveryFingerprintAndRejectsExtras(t *tes
 		return value
 	}
 	current := []string{fingerprint(oldOne), fingerprint(oldTwo)}
-	merged, missing, err := mergeRegisteredJumpKeys(current, selected, []string{oldOne})
+	merged, missing, err := mergeRegisteredJumpKeys(current, selected, []string{selected, oldOne}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(merged) != 2 || len(missing) != 1 || missing[0] != fingerprint(oldTwo) {
 		t.Fatalf("partial local records produced %d merged keys and missing %#v", len(merged), missing)
 	}
-	merged, missing, err = mergeRegisteredJumpKeys(current, selected, []string{oldOne, oldTwo})
+	merged, missing, err = mergeRegisteredJumpKeys(current, selected, []string{selected, oldOne, oldTwo, extra}, nil)
 	if err != nil || len(missing) != 0 || len(merged) != 3 {
-		t.Fatalf("complete records did not preserve the list: keys=%d missing=%#v err=%v", len(merged), missing, err)
+		t.Fatalf("local candidates did not preserve only registered keys: keys=%d missing=%#v err=%v", len(merged), missing, err)
 	}
-	if _, _, err := mergeRegisteredJumpKeys(current, selected, []string{oldOne, oldTwo, extra}); err == nil {
-		t.Fatal("an unregistered, unselected public key was accepted")
+	_, _, err = mergeRegisteredJumpKeys(current, selected, []string{selected, oldOne}, []string{extra})
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatal("an explicitly pasted unregistered public key was not rejected clearly")
+	}
+}
+
+func TestMergeRegisteredJumpKeysAcceptsPastedRegisteredKeys(t *testing.T) {
+	selected := authorizedKeyFixture(t)
+	registered := authorizedKeyFixture(t)
+	fingerprint, err := fingerprintForAuthorizedKey(registered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged, missing, err := mergeRegisteredJumpKeys([]string{fingerprint}, selected, []string{selected}, []string{registered})
+	if err != nil || len(merged) != 2 || len(missing) != 0 {
+		t.Fatalf("registered pasted public key was not accepted: keys=%d missing=%#v err=%v", len(merged), missing, err)
 	}
 }
 
@@ -110,4 +126,32 @@ func authorizedKeyFixture(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+}
+
+func TestRegisteredJumpKeyRemainsSuccessfulWhenAccessVerificationFails(t *testing.T) {
+	for _, test := range []struct {
+		err                  error
+		status, verification string
+	}{
+		{nil, "ready", ""},
+		{transport.ErrNetwork, "registered", "network"},
+		{transport.ErrAuthentication, "registered", "accountAuthentication"},
+		{transport.ErrJumpKeyRejected, "registered", "pending"},
+	} {
+		response := registeredJumpKeyResult("fixture", "/fixture/key", []string{"SHA256:key"}, test.err)
+		if !response.OK {
+			t.Fatalf("confirmed registration became a failure: %#v", response)
+		}
+		data := response.Data.(map[string]any)
+		if data["Enrolled"] != true || data["Status"] != test.status {
+			t.Fatalf("registration result = %#v", data)
+		}
+		if test.verification != "" && data["VerificationStatus"] != test.verification {
+			t.Fatalf("verification status = %#v", data)
+		}
+	}
+	changed := registeredJumpKeyResult("fixture", "/fixture/key", nil, transport.ErrChangedHostKey)
+	if changed.OK || changed.Code != "changedHostKey" || changed.Data.(map[string]any)["Enrolled"] != true {
+		t.Fatalf("host identity change must stay explicit: %#v", changed)
+	}
 }

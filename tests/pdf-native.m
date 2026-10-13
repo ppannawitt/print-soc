@@ -29,6 +29,8 @@ int main(){@autoreleasepool{
     check(SPValidRequest(@{@"ID":@"1",@"Action":@"checkJumpKey"}),@"jump-key check action allowed");
     check(SPValidRequest(@{@"ID":@"1",@"Action":@"enrollJumpKey",@"ExpectedFingerprints":@[@"SHA256:existing"],@"AdditionalPublicKeys":@"ssh-ed25519 AAAA"}),@"bounded jump-key enrollment request allowed");
     check(SPValidRequest(@{@"ID":@"1",@"Action":@"createAndEnrollKey"}),@"managed-key enrollment action allowed");
+    check(SPValidRequest(@{@"ID":@"1",@"Action":@"showJumpSetupNotification",@"Status":@"noKey"}),@"native jump-setup notification allowed");
+    check(SPValidRequest(@{@"ID":@"1",@"Action":@"clearJumpSetupNotification"}),@"native jump-setup notification cleanup allowed");
     check(!SPValidRequest(@{@"ID":@"1",@"Action":@"enrollJumpKey",@"ExpectedFingerprints":@"invalid"}),@"malformed expected fingerprints rejected");
     check(SPValidRequest(@{@"ID":@"1",@"Action":@"getPublicKey"}),@"local public-key export allowed");
     check(!SPValidRequest(@{@"ID":@"1",@"Action":@"arbitraryAction"}),@"unknown action rejected");

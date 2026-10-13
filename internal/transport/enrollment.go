@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -23,6 +24,8 @@ var fingerprintPattern = regexp.MustCompile(`SHA256:[A-Za-z0-9+/]+={0,2}`)
 var ErrJumpKeyRejected = errors.New("the selected SSH key was rejected by the SoC jump host")
 var ErrJumpEnrollmentRejected = errors.New("the SoC SSH Key Service rejected the jump-key update")
 var ErrJumpEnrollmentUncertain = errors.New("the SoC SSH Key Service could not confirm the jump-key update")
+var errJumpPasswordAuthentication = fmt.Errorf("%w: the jump host accepted the key but did not accept the account password", ErrAuthentication)
+var errJumpAdditionalAuthentication = errors.New("the jump host accepted the key but requires an unsupported additional authentication method")
 
 // SelectedKeyFingerprint returns the selected private key's public fingerprint.
 func SelectedKeyFingerprint(path, passphrase string) (string, error) {
@@ -36,8 +39,10 @@ func SelectedKeyFingerprint(path, passphrase string) (string, error) {
 	return ssh.FingerprintSHA256(signer.PublicKey()), nil
 }
 
-// CheckJumpKey authenticates to sjump using this private key alone, then checks
-// that the same jump session can reach and authenticate to stu.
+// CheckJumpKey requires the selected key to authenticate to sjump. Some SoC
+// routes require publickey,password: supply the password only after the server
+// confirms public-key partial success. Password fallback cannot pass this check.
+// Then verify that the same jump session can reach and authenticate to stu.
 func (s *SSH) CheckJumpKey(ctx context.Context) error {
 	if s.keyPath == "" {
 		return ErrNoKey
@@ -49,19 +54,13 @@ func (s *SSH) CheckJumpKey(ctx context.Context) error {
 		}
 		return fmt.Errorf("%w: %v", ErrInvalidKey, err)
 	}
-	jumpConfig := &ssh.ClientConfig{
-		User: s.username, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: s.knownHosts, Timeout: 8 * time.Second,
-	}
-	jump, err := s.dialHost(ctx, JumpHost, jumpConfig)
+	jumpConfig := jumpKeyClientConfig(s.username, s.password, signer, s.knownHosts)
+	jump, err := s.dialJumpKey(ctx, jumpConfig)
 	if err != nil {
-		if errors.Is(err, ErrAuthentication) {
-			return ErrJumpKeyRejected
-		}
 		return err
 	}
 	defer jump.Close()
-	target, err := jump.Dial("tcp", hostAddress(UnixHost))
+	target, err := jump.DialContext(ctx, "tcp", hostAddress(s.unixHost))
 	if err != nil {
 		return fmt.Errorf("%w through the jump host: %v", ErrNetwork, err)
 	}
@@ -69,7 +68,7 @@ func (s *SSH) CheckJumpKey(ctx context.Context) error {
 		User: s.username, Auth: []ssh.AuthMethod{ssh.Password(s.password)},
 		HostKeyCallback: s.knownHosts, Timeout: 8 * time.Second,
 	}
-	client, err := s.completeHandshake(target, hostAddress(UnixHost), targetConfig)
+	client, err := s.completeHandshake(target, hostAddress(s.unixHost), targetConfig)
 	if err != nil {
 		if errors.Is(err, ErrAuthentication) {
 			return ErrAuthentication
@@ -78,6 +77,93 @@ func (s *SSH) CheckJumpKey(ctx context.Context) error {
 	}
 	_ = client.Close()
 	return nil
+}
+
+func jumpKeyClientConfig(username, password string, signer ssh.Signer, verifyHost ssh.HostKeyCallback) *ssh.ClientConfig {
+	return &ssh.ClientConfig{
+		User: username, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: verifyHost, Timeout: 8 * time.Second,
+		AuthCallback: func(auth *ssh.ClientAuthContext) (ssh.AuthMethod, error) {
+			if !slices.Contains(auth.PartialSuccessMethods, "publickey") {
+				return nil, nil // Only the selected public key may be attempted first.
+			}
+			if password == "" || slices.Contains(auth.TriedMethods, "password") {
+				return nil, errJumpPasswordAuthentication
+			}
+			if !slices.Contains(auth.AllowedMethods, "password") {
+				return nil, errJumpAdditionalAuthentication
+			}
+			return ssh.Password(password), nil
+		},
+	}
+}
+
+// dialJumpKey checks every address returned for sjump. Since the hostname can
+// resolve to multiple jump servers, one backend's rejection must not stand in
+// for the entire jump service.
+func (s *SSH) dialJumpKey(ctx context.Context, clientConfig *ssh.ClientConfig) (*ssh.Client, error) {
+	logicalAddress := hostAddress(s.jumpHost)
+	host, port, err := net.SplitHostPort(logicalAddress)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid jump-host address", ErrNetwork)
+	}
+	resolved, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("%w: could not resolve the jump host: %v", ErrNetwork, err)
+	}
+	addresses := make([]string, 0, len(resolved))
+	seen := make(map[string]struct{}, len(resolved))
+	for _, candidate := range resolved {
+		address := net.JoinHostPort(candidate.IP.String(), port)
+		if _, exists := seen[address]; exists {
+			continue
+		}
+		seen[address] = struct{}{}
+		addresses = append(addresses, address)
+	}
+	if len(addresses) == 0 {
+		return nil, fmt.Errorf("%w: the jump host has no addresses", ErrNetwork)
+	}
+	return dialJumpKeyAddresses(ctx, logicalAddress, addresses, clientConfig)
+}
+
+func dialJumpKeyAddresses(ctx context.Context, logicalAddress string, addresses []string, clientConfig *ssh.ClientConfig) (*ssh.Client, error) {
+	rejected := 0
+	for _, address := range addresses {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
+		}
+		connection, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", address)
+		if err != nil {
+			continue
+		}
+		stopCancel := context.AfterFunc(ctx, func() { _ = connection.Close() })
+		client, handshakeErr := (&SSH{}).completeHandshake(connection, logicalAddress, clientConfig)
+		stopCancel()
+		if handshakeErr == nil {
+			return client, nil
+		}
+		if errors.Is(handshakeErr, errJumpPasswordAuthentication) || errors.Is(handshakeErr, errJumpAdditionalAuthentication) {
+			return nil, handshakeErr // The key was accepted; never report rejection.
+		}
+		if errors.Is(handshakeErr, ErrAuthentication) {
+			rejected++
+			continue
+		}
+		// Host-identity failures and explicit user verification requests must
+		// never be hidden by another address in the DNS response.
+		if errors.Is(handshakeErr, ErrChangedHostKey) {
+			return nil, handshakeErr
+		}
+		var trust *TrustRequired
+		if errors.As(handshakeErr, &trust) {
+			return nil, trust
+		}
+	}
+	if len(addresses) > 0 && rejected == len(addresses) {
+		return nil, ErrJumpKeyRejected
+	}
+	return nil, fmt.Errorf("%w: no jump server accepted a connection", ErrNetwork)
 }
 
 // ShowJumpKeys reads the SSH Key Service's jump-host fingerprints.

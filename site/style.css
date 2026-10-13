@@ -18,7 +18,7 @@ h2{font-size:24px;line-height:1.4;margin:32px 0 15px;font-weight:650}h3{font-siz
 .current-release{font-size:13px;color:var(--muted);margin-bottom:12px}
 .platform-list{border-top:1px solid var(--line);margin-bottom:20px}
 .platform-row{display:flex;align-items:center;justify-content:space-between;gap:28px;padding:26px 0;border-bottom:1px solid var(--line)}
-.platform-row h2{font-size:20px;margin:0 0 5px;letter-spacing:-.2px}.platform-row p{font-size:14px;color:var(--muted);margin:0}.availability{font-size:12px;font-weight:500;letter-spacing:0;color:var(--link);margin-left:10px;white-space:nowrap}
+.platform-row h2{font-size:20px;margin:0 0 5px;letter-spacing:-.2px}.platform-row p{font-size:14px;color:var(--muted);margin:0}
 .download-button{font:600 14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:218px;min-height:44px;background:var(--link);color:#fff;border:1px solid var(--link);border-radius:2px;padding:11px 16px;text-decoration:none;cursor:pointer}
 .download-button:hover{text-decoration:none;background:#1c5734}.download-button:disabled{background:transparent;color:#767c78;border-color:#ced2cf;cursor:default}
 .contents{align-self:start;display:flex;flex-direction:column;gap:9px;position:sticky;top:24px;font-size:14px}.contents p{font-size:14px;font-weight:650;margin:0 0 8px;color:var(--ink)}.contents a{text-decoration:none;color:var(--muted)}

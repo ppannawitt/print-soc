@@ -3,11 +3,12 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <PDFKit/PDFKit.h>
+#import <UserNotifications/UserNotifications.h>
 #import "_cgo_export.h"
 #import "bridge.h"
 #import "pdfengine.h"
 
-@interface SoCPrintDelegate : NSObject <NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, WKURLSchemeHandler>
+@interface SoCPrintDelegate : NSObject <NSApplicationDelegate, UNUserNotificationCenterDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, WKURLSchemeHandler>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) WKWebView *webView;
 @property(nonatomic, strong) NSDictionary *resources;
@@ -15,6 +16,7 @@
 @property(nonatomic) dispatch_queue_t pdfQueue;
 @property(nonatomic) NSUInteger accountRevision;
 @property(nonatomic, strong) NSMutableSet *approvedKeys;
+@property(nonatomic, copy) NSString *pendingCommand;
 @end
 
 static SoCPrintDelegate *retainedDelegate = nil;
@@ -61,6 +63,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
     self.pdf = [[SPPDFController alloc] init];
     self.pdfQueue = dispatch_queue_create("app.printatsoc.pdf", DISPATCH_QUEUE_SERIAL);
     self.approvedKeys = [NSMutableSet set];
+    [self installJumpNotificationCategories];
     self.webView = [[WKWebView alloc] initWithFrame:self.window.contentView.bounds configuration:configuration];
     self.webView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     self.webView.navigationDelegate = self;
@@ -104,13 +107,94 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
     editItem.submenu=edit;[menu addItem:editItem];NSApp.mainMenu=menu;
 }
 - (void)sendCommand:(NSString *)command {
-    if(SPTrustedURL(self.webView.URL))[self.webView evaluateJavaScript:[NSString stringWithFormat:@"window.socprintCommand(%@)",jsonString(@[command])] completionHandler:nil];
+	if(SPTrustedURL(self.webView.URL)) [self.webView evaluateJavaScript:[NSString stringWithFormat:@"window.socprintCommand(%@)",jsonString(@[command])] completionHandler:nil];
+	else self.pendingCommand = command;
+}
+- (void)installJumpNotificationCategories {
+    UNNotificationAction *autoSetup=[UNNotificationAction actionWithIdentifier:@"jumpAutoSetup" title:@"Set up automatically" options:UNNotificationActionOptionForeground];
+    UNNotificationAction *useOwnKey=[UNNotificationAction actionWithIdentifier:@"jumpUseOwnKey" title:@"Use my own key" options:UNNotificationActionOptionForeground];
+    UNNotificationAction *enroll=[UNNotificationAction actionWithIdentifier:@"jumpEnrollKey" title:@"Enroll this key" options:UNNotificationActionOptionForeground];
+    UNNotificationAction *choose=[UNNotificationAction actionWithIdentifier:@"jumpChooseKey" title:@"Choose another key" options:UNNotificationActionOptionForeground];
+    UNNotificationAction *create=[UNNotificationAction actionWithIdentifier:@"jumpCreateKey" title:@"Create a new key" options:UNNotificationActionOptionForeground];
+    UNNotificationAction *openAccount=[UNNotificationAction actionWithIdentifier:@"jumpOpenAccount" title:@"Open Account" options:UNNotificationActionOptionForeground];
+    UNNotificationAction *later=[UNNotificationAction actionWithIdentifier:@"jumpLater" title:@"Later" options:UNNotificationActionOptionNone];
+    UNNotificationCategory *noKey=[UNNotificationCategory categoryWithIdentifier:@"socprint.jump.no-key" actions:@[autoSetup,useOwnKey,later] intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction];
+    UNNotificationCategory *rejected=[UNNotificationCategory categoryWithIdentifier:@"socprint.jump.rejected" actions:@[enroll,choose,later] intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction];
+    UNNotificationCategory *enrollmentFailed=[UNNotificationCategory categoryWithIdentifier:@"socprint.jump.enrollment-failed" actions:@[create,choose,later] intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction];
+    UNNotificationCategory *needsAccount=[UNNotificationCategory categoryWithIdentifier:@"socprint.jump.account" actions:@[openAccount,later] intentIdentifiers:@[] options:UNNotificationCategoryOptionCustomDismissAction];
+    UNUserNotificationCenter *center=[UNUserNotificationCenter currentNotificationCenter];
+    center.delegate=self;
+    [center setNotificationCategories:[NSSet setWithArray:@[noKey,rejected,enrollmentFailed,needsAccount]]];
+}
+- (void)showJumpSetupNotification:(NSString *)status requestID:(NSString *)requestID {
+    NSString *title=@"SoC jump access needs attention";
+    NSString *body=@"Check your SSH key in Account to print from COM2 and other campus locations.";
+    NSString *category=@"socprint.jump.account";
+    if([status isEqualToString:@"noKey"]) {
+        title=@"Set up SoC jump access";
+        body=@"You don’t have an SSH key set up. Set one up to print from COM2 and other campus locations using the SoC jump host.";
+        category=@"socprint.jump.no-key";
+    } else if([status isEqualToString:@"rejected"]) {
+        body=@"The selected SSH key was rejected by the jump hosts. Try enrolling it or choose another key.";
+        category=@"socprint.jump.rejected";
+    } else if([status isEqualToString:@"enrollmentFailed"]) {
+        title=@"Could not enroll this SSH key";
+        body=@"The SoC SSH Key Service did not accept this key update. Create a new key or choose another.";
+        category=@"socprint.jump.enrollment-failed";
+    } else if([status isEqualToString:@"locked"]) {
+        title=@"Unlock your SSH key";
+        body=@"Enter the key passphrase in Account, then try jump access again.";
+    } else if([status isEqualToString:@"invalidKey"]) {
+        title=@"Choose a valid SSH key";
+        body=@"The selected file could not be read as a private key. Choose another key in Account.";
+    } else if([status isEqualToString:@"accountAuthentication"]) {
+        title=@"Check your SoC password";
+        body=@"The saved SoC password was not accepted while checking jump access. Update it in Account.";
+    } else {
+        deliverNativeResponse(requestID,NO,nil,@"invalidNotification",@"That jump-access notification is unavailable.");
+        return;
+    }
+    UNMutableNotificationContent *content=[[UNMutableNotificationContent alloc] init];
+    content.title=title;
+    content.body=body;
+    content.categoryIdentifier=category;
+    content.threadIdentifier=@"socprint.jump-setup";
+    UNUserNotificationCenter *center=[UNUserNotificationCenter currentNotificationCenter];
+    [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL granted, NSError *authorizationError) {
+        if(!granted || authorizationError) {
+            deliverNativeResponse(requestID,YES,@{@"Delivered":@NO},nil,nil);
+            return;
+        }
+        UNNotificationRequest *request=[UNNotificationRequest requestWithIdentifier:@"socprint.jump-setup" content:content trigger:nil];
+        [center removeDeliveredNotificationsWithIdentifiers:@[@"socprint.jump-setup"]];
+        [center addNotificationRequest:request withCompletionHandler:^(NSError *error) {
+            deliverNativeResponse(requestID,YES,@{@"Delivered":@(error==nil)},nil,nil);
+        }];
+    }];
+}
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
+    completionHandler(UNNotificationPresentationOptionBanner|UNNotificationPresentationOptionList);
+}
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler {
+    NSString *identifier=response.actionIdentifier;
+    NSString *command=nil;
+    if([identifier isEqualToString:UNNotificationDefaultActionIdentifier]) command=@"jumpOpenAccount";
+    else if([identifier isEqualToString:UNNotificationDismissActionIdentifier]) command=@"jumpLater";
+    else if([@[@"jumpAutoSetup",@"jumpUseOwnKey",@"jumpEnrollKey",@"jumpChooseKey",@"jumpCreateKey",@"jumpOpenAccount",@"jumpLater"] containsObject:identifier]) command=identifier;
+    if(command) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if(![command isEqualToString:@"jumpLater"]) [NSApp activateIgnoringOtherApps:YES];
+            [self sendCommand:command];
+        });
+    }
+    [center removeDeliveredNotificationsWithIdentifiers:@[@"socprint.jump-setup"]];
+    completionHandler();
 }
 - (void)openPDF:(id)sender { [self sendCommand:@"open"]; }
 - (void)printDocument:(id)sender { [self sendCommand:@"print"]; }
 - (void)showSettings:(id)sender { [self sendCommand:@"settings"]; }
 - (void)showAbout:(id)sender {
-    [NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionApplicationName:@"SimplyPrint @ SoC",NSAboutPanelOptionApplicationVersion:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],@"Copyright":@"Independent student project · No telemetry"}];
+    [NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionApplicationName:@"SimplyPrint @ SoC",NSAboutPanelOptionApplicationVersion:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"]}];
 }
 - (BOOL)isApprovedKeyPath:(NSString *)path {
     if ([self.approvedKeys containsObject:path]) return YES;
@@ -137,6 +221,13 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
     [task didReceiveData:data];[task didFinish];
 }
 - (void)webView:(WKWebView *)webView stopURLSchemeTask:(id<WKURLSchemeTask>)task {}
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+    if(self.pendingCommand.length && SPTrustedURL(webView.URL)) {
+        NSString *command=self.pendingCommand;
+        self.pendingCommand=nil;
+        [self sendCommand:command];
+    }
+}
 - (WKWebView *)webView:(WKWebView *)webView createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration forNavigationAction:(WKNavigationAction *)action windowFeatures:(WKWindowFeatures *)features { return nil; }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
@@ -225,6 +316,18 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
                 ? response - NSAlertFirstButtonReturn : -1;
             deliverNativeResponse(requestID, YES, @{ @"ButtonIndex": @(index) }, nil, nil);
         }];
+        return;
+    }
+    if ([action isEqualToString:@"showJumpSetupNotification"]) {
+        NSString *status=[body[@"Status"] isKindOfClass:NSString.class]?body[@"Status"]:@"";
+        [self showJumpSetupNotification:status requestID:requestID];
+        return;
+    }
+    if ([action isEqualToString:@"clearJumpSetupNotification"]) {
+        UNUserNotificationCenter *center=[UNUserNotificationCenter currentNotificationCenter];
+        [center removeDeliveredNotificationsWithIdentifiers:@[@"socprint.jump-setup"]];
+        [center removePendingNotificationRequestsWithIdentifiers:@[@"socprint.jump-setup"]];
+        deliverNativeResponse(requestID,YES,@{@"Cleared":@YES},nil,nil);
         return;
     }
     if ([action isEqualToString:@"revealSecret"]) {

@@ -2,9 +2,11 @@ SimplyPrint @ SoC v1.1.0 for macOS 13 or later, on Apple Silicon and Intel.
 
 ## What’s new
 
-This release adds guided SSH-key enrollment for the SoC jump host. When direct SoC access is available, the app checks the selected key using key-only authentication. If jump access needs setup, users can enroll their selected key, choose another key, or create an encrypted managed Ed25519 key. Managed-key passphrases are generated randomly and stored in macOS Keychain by account and key fingerprint.
+This release adds guided SSH-key enrollment for the SoC jump host. After connecting, reloading a queue, or printing through direct SoC access, the app checks the selected key and sends a macOS notification if setup is needed. Jump verification requires the key to be accepted; if the server then requests the SoC password, the saved password completes that additional step. Password-only access never counts as a working key. Users can enroll their selected key, choose another key, or create an encrypted managed Ed25519 key. Managed-key passphrases are generated randomly and stored in macOS Keychain by account and key fingerprint.
 
 Before enrollment, the app reads the current jump-key fingerprints and recovers matching public-key lines from local public-key files. It asks for any missing lines and stops if every registered key cannot be included or the configuration changes. It submits the complete merged list, verifies the service response and resulting fingerprints, then tests jump access. Interrupted results are checked before another enrollment can be attempted. Existing private-key files and saved credentials are preserved. Custom key selection, passphrase entry, public-key copying, and manual registration remain available.
+
+The network-dependent false key-rejection bug is fixed: a jump server's accepted public key followed by a required password is now handled correctly. A confirmed registration remains successful if the later access check cannot complete. Enrolling an already registered key checks access without resubmitting the key list.
 
 ## Printing and network access
 

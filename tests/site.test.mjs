@@ -29,8 +29,8 @@ test('all website pages have valid local navigation, language and accessible mai
 });
 test('published app has a direct Mac download and Windows coming soon',()=>{
   const home=fs.readFileSync(new URL('index.html',site),'utf8');
-  assert.ok(home.includes('Available now'));assert.ok(home.includes('Download for Windows'));assert.ok(home.includes('Coming soon'));
-  assert.match(home,/href="https:\/\/github\.com\/ppannawitt\/print-soc\/releases\/download\/v\d+\.\d+\.\d+\/SimplyPrint-at-SoC-Universal\.dmg"/);
+  assert.doesNotMatch(home,/Available now|class="availability"/);assert.ok(home.includes('Download for Windows'));assert.ok(home.includes('Coming soon'));
+  assert.match(home,/href="https:\/\/github\.com\/ppannawitt\/print-soc\/releases\/download\/v1\.1\.0\/SimplyPrint-at-SoC-Universal\.dmg"/);
   assert.doesNotMatch(home, /V1 is being prepared|<button id="download"|<a[^>]*>GitHub<\/a>/);
   for(const name of ['index.html','printing.html','ssh-keys.html'])assert.doesNotMatch(fs.readFileSync(new URL(name,site),'utf8'),/xattr|spctl --master-disable|curl.+\|\s*(?:sh|bash)/);
 });

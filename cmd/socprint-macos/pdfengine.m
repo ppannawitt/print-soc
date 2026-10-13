@@ -20,7 +20,7 @@ BOOL SPTrustedMessage(WKWebView *webView, WKFrameInfo *frame, WKWebView *expecte
 BOOL SPValidRequest(NSDictionary *body) {
     if(![body isKindOfClass:NSDictionary.class] || ![body[@"ID"] isKindOfClass:NSString.class] ||
        [body[@"ID"] length]>80 || ![body[@"Action"] isKindOfClass:NSString.class]) return NO;
-    NSSet *strings=[NSSet setWithArray:@[@"ID",@"Action",@"Username",@"Password",@"KeyPath",@"KeyPassphrase",@"Passphrase",@"AdditionalPublicKeys",@"DocumentHandle",@"PreparedHandle",@"Handle",@"PrinterID",@"Queue",@"JobID",@"TermsVersion",@"Secret",@"Title",@"Message",@"Style",@"Text",@"URL"]];
+    NSSet *strings=[NSSet setWithArray:@[@"ID",@"Action",@"Username",@"Password",@"KeyPath",@"KeyPassphrase",@"Passphrase",@"AdditionalPublicKeys",@"DocumentHandle",@"PreparedHandle",@"Handle",@"PrinterID",@"Queue",@"JobID",@"TermsVersion",@"Secret",@"Title",@"Message",@"Style",@"Status",@"Text",@"URL"]];
     NSSet *booleans=[NSSet setWithArray:@[@"Forget",@"ClearKey",@"Retrieve"]];
     for(NSString *key in body) {
         id value=body[key];
@@ -37,7 +37,7 @@ BOOL SPValidRequest(NSDictionary *body) {
         } else return NO; // Raw file paths are never a web API.
     }
     NSString *action=body[@"Action"];
-    if(![@[@"initialize",@"acceptTerms",@"detectNetwork",@"checkJumpKey",@"enrollJumpKey",@"createAndEnrollKey",@"saveCredentials",@"signIn",@"trustHost",@"cancelTrust",@"createKey",@"getPublicKey",@"useKey",@"submitPrint",@"listJobs",@"refreshJobs",@"queue",@"cancelJob",@"signOut",@"shutdown",@"choosePDF",@"chooseKey",@"previewPDF",@"preparePDF",@"releaseDocument",@"nativeAlert",@"revealSecret",@"quitApp",@"copyText",@"openURL"] containsObject:action])return NO;
+    if(![@[@"initialize",@"acceptTerms",@"detectNetwork",@"checkJumpKey",@"enrollJumpKey",@"createAndEnrollKey",@"saveCredentials",@"signIn",@"trustHost",@"cancelTrust",@"createKey",@"getPublicKey",@"useKey",@"submitPrint",@"listJobs",@"refreshJobs",@"queue",@"cancelJob",@"signOut",@"shutdown",@"choosePDF",@"chooseKey",@"previewPDF",@"preparePDF",@"releaseDocument",@"nativeAlert",@"showJumpSetupNotification",@"clearJumpSetupNotification",@"revealSecret",@"quitApp",@"copyText",@"openURL"] containsObject:action])return NO;
     if([@[@"previewPDF",@"preparePDF"] containsObject:action]) {
         if(![body[@"DocumentHandle"] length] || !SPValidateOptions(body[@"Options"],nil))return NO;
         if([action isEqualToString:@"previewPDF"] && !body[@"Sheet"])return NO;

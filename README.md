@@ -4,7 +4,7 @@ Print PDFs with the SimplyPrint @ SoC app for macOS or through SSH from a termin
 
 ## Download
 
-[Download for macOS](https://github.com/ppannawitt/print-soc/releases/download/v1.0.1/SimplyPrint-at-SoC-Universal.dmg)
+[Download for macOS](https://github.com/ppannawitt/print-soc/releases/download/v1.1.0/SimplyPrint-at-SoC-Universal.dmg)
 
 Requires macOS 13 or later. Works on Apple Silicon and Intel Macs. Windows is coming soon.
 

@@ -2,7 +2,7 @@ package main
 
 /*
 #cgo darwin CFLAGS: -fobjc-arc -fblocks -mmacosx-version-min=13.0
-#cgo darwin LDFLAGS: -mmacosx-version-min=13.0 -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers -framework LocalAuthentication -framework PDFKit
+#cgo darwin LDFLAGS: -mmacosx-version-min=13.0 -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers -framework LocalAuthentication -framework PDFKit -framework UserNotifications
 #include <stdlib.h>
 void socprint_run(const char *html);
 void socprint_respond(const char *response);
@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -606,6 +607,14 @@ func (a *application) trustHost(id string) uiResponse {
 		}
 		return response
 	}
+	if jumpAction == "verifyEnrollment" && jumpRequest != nil {
+		response := a.verifyRegisteredJumpKey(id, client, jumpRequest.KeyPath, transport.JumpKeyConfig{Fingerprints: jumpRequest.ExpectedFingerprints})
+		if !responseNeedsTrust(response) {
+			_ = client.Close()
+			a.clearPendingJump()
+		}
+		return response
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	route, err := client.Connect(ctx, true)
@@ -864,9 +873,17 @@ func (a *application) enrollJumpKeyWithClient(request uiRequest, client *transpo
 	if len(request.ExpectedFingerprints) > 0 && !sameStrings(current.Fingerprints, request.ExpectedFingerprints) {
 		return failure(request.ID, "jumpKeysChanged", "The registered jump keys changed while setup was in progress. Refresh the setup and review the current keys.", nil)
 	}
+	selectedFingerprint, err := fingerprintForAuthorizedKey(publicKey)
+	if err != nil {
+		return failure(request.ID, "invalidPublicKeys", "The selected public key could not be verified.", nil)
+	}
+	if slices.Contains(current.Fingerprints, selectedFingerprint) {
+		// Registration is already complete. Verify access without replacing the
+		// service's key list or asking for unrelated existing public-key files.
+		return a.verifyRegisteredJumpKey(request.ID, client, keyPath, current)
+	}
 	availableKeys := discoverAuthorizedKeys(keyPath, publicKey)
-	availableKeys = append(availableKeys, strings.Split(request.AdditionalPublicKeys, "\n")...)
-	merged, missing, err := mergeRegisteredJumpKeys(current.Fingerprints, publicKey, availableKeys)
+	merged, missing, err := mergeRegisteredJumpKeys(current.Fingerprints, publicKey, availableKeys, strings.Split(request.AdditionalPublicKeys, "\n"))
 	if err != nil {
 		return failure(request.ID, "invalidPublicKeys", err.Error(), nil)
 	}
@@ -895,32 +912,46 @@ func (a *application) enrollJumpKeyWithClient(request uiRequest, client *transpo
 			return failure(request.ID, "enrollmentUncertain", "The update could not be confirmed. Check jump access before trying enrollment again.", data)
 		}
 	}
-	if err := client.CheckJumpKey(ctx); err != nil {
-		var trust *transport.TrustRequired
-		if errors.As(err, &trust) {
-			a.rememberJumpTrust(client, trust, "check", nil)
-			return result(request.ID, map[string]any{"NeedsTrust": true, "Host": trust.Host, "Fingerprint": trust.Fingerprint})
-		}
-		data := map[string]any{"Enrolled": true, "Fingerprints": updated.Fingerprints, "KeyPath": keyPath}
-		if errors.Is(err, transport.ErrNetwork) {
-			return failure(request.ID, "network", "The key was saved by SoC, but the connection ended before jump access could be checked. Retry when online.", data)
-		}
-		if errors.Is(err, transport.ErrAuthentication) {
-			return failure(request.ID, "accountAuthentication", "The key was saved by SoC, but SoC did not accept the saved account password for the destination server.", data)
-		}
-		if errors.Is(err, transport.ErrChangedHostKey) {
-			return failure(request.ID, "changedHostKey", "The key was saved by SoC, but a saved SSH server identity changed. Verify it with SoC before continuing.", data)
-		}
-		return failure(request.ID, "enrollmentUnverified", "The key was saved by SoC, but jump access could not be verified yet. Check the connection and try again.", data)
-	}
-	return result(request.ID, map[string]any{"Enrolled": true, "Ready": true, "Fingerprints": updated.Fingerprints, "KeyPath": keyPath, "Username": username})
+	return a.verifyRegisteredJumpKey(request.ID, client, keyPath, updated)
 }
 
-func mergeRegisteredJumpKeys(currentFingerprints []string, selectedKey string, availableKeys []string) ([]string, []string, error) {
-	merged, represented, err := transport.MergeAuthorizedKeys(append(availableKeys, selectedKey))
-	if err != nil {
-		return nil, nil, err
+func (a *application) verifyRegisteredJumpKey(id string, client *transport.SSH, keyPath string, registered transport.JumpKeyConfig) uiResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	err := client.CheckJumpKey(ctx)
+	var trust *transport.TrustRequired
+	if errors.As(err, &trust) {
+		request := &uiRequest{KeyPath: keyPath, ExpectedFingerprints: registered.Fingerprints}
+		a.rememberJumpTrust(client, trust, "verifyEnrollment", request)
+		return result(id, map[string]any{"Enrolled": true, "Ready": false, "Status": "registered", "VerificationStatus": "hostVerification", "KeyPath": keyPath, "NeedsTrust": true, "Host": trust.Host, "Fingerprint": trust.Fingerprint})
 	}
+	return registeredJumpKeyResult(id, keyPath, registered.Fingerprints, err)
+}
+
+func registeredJumpKeyResult(id, keyPath string, fingerprints []string, verificationErr error) uiResponse {
+	data := map[string]any{"Enrolled": true, "Ready": verificationErr == nil, "Fingerprints": fingerprints, "KeyPath": keyPath, "Status": "registered"}
+	if verificationErr == nil {
+		data["Status"] = "ready"
+		return result(id, data)
+	}
+	if errors.Is(verificationErr, transport.ErrChangedHostKey) {
+		return failure(id, "changedHostKey", "Your key is registered with SoC, but a saved SSH server identity changed. Verify it with SoC before continuing.", data)
+	}
+	data["VerificationStatus"] = "unavailable"
+	data["Message"] = "Your SSH key is registered with SoC. Jump access could not be checked yet; use Check jump access to verify it later."
+	if errors.Is(verificationErr, transport.ErrAuthentication) {
+		data["VerificationStatus"] = "accountAuthentication"
+		data["Message"] = "Your SSH key is registered with SoC. Update your saved SoC password, then check jump access again."
+	} else if errors.Is(verificationErr, transport.ErrNetwork) {
+		data["VerificationStatus"] = "network"
+	} else if errors.Is(verificationErr, transport.ErrJumpKeyRejected) {
+		data["VerificationStatus"] = "pending"
+		data["Message"] = "Your SSH key is registered with SoC. The jump server has not accepted it yet; wait briefly, then check jump access again."
+	}
+	return result(id, data)
+}
+
+func mergeRegisteredJumpKeys(currentFingerprints []string, selectedKey string, availableKeys, suppliedKeys []string) ([]string, []string, error) {
 	selectedFingerprint, err := fingerprintForAuthorizedKey(selectedKey)
 	if err != nil {
 		return nil, nil, errors.New("the selected SSH key could not be verified")
@@ -930,10 +961,36 @@ func mergeRegisteredJumpKeys(currentFingerprints []string, selectedKey string, a
 		allowed[fingerprint] = struct{}{}
 	}
 	allowed[selectedFingerprint] = struct{}{}
-	for fingerprint := range represented {
+	// Local .pub files are only candidates for preserving keys that SoC still
+	// lists. Ignore unrelated keys found in ~/.ssh instead of making them block
+	// enrollment. Keys the user pastes are explicit input, so reject those when
+	// their fingerprint is neither the selected key nor on SoC's current list.
+	keys := []string{selectedKey}
+	for _, candidate := range availableKeys {
+		fingerprint, parseErr := fingerprintForAuthorizedKey(candidate)
+		if parseErr != nil {
+			continue
+		}
+		if _, ok := allowed[fingerprint]; ok {
+			keys = append(keys, candidate)
+		}
+	}
+	for _, candidate := range suppliedKeys {
+		if strings.TrimSpace(candidate) == "" {
+			continue
+		}
+		fingerprint, parseErr := fingerprintForAuthorizedKey(candidate)
+		if parseErr != nil {
+			return nil, nil, errors.New("enter one complete authorized-key line for each registered fingerprint")
+		}
 		if _, ok := allowed[fingerprint]; !ok {
 			return nil, nil, errors.New("a supplied public key does not match the selected key or a key already registered with SoC")
 		}
+		keys = append(keys, candidate)
+	}
+	merged, represented, err := transport.MergeAuthorizedKeys(keys)
+	if err != nil {
+		return nil, nil, err
 	}
 	missing := make([]string, 0)
 	for _, fingerprint := range currentFingerprints {

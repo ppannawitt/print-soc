@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "source_sha256": "0379de1f19096879ceb6cddf3d65511182b454e34d80f9d9685839fb54c93d1a",
+  "source_sha256": "61a0e50bf8884757bab95b5e9f68bcf474647db8f9640c7a6943a9d3dc5ac951",
   "checks": {
     "apple_silicon_install_upgrade": {
       "passed": false,
@@ -28,11 +28,11 @@
     },
     "real_soc_jump_enrollment_preservation": {
       "passed": false,
-      "evidence": "The user supplied a terminal transcript showing successful manual jump-key registration and the resulting ED25519 fingerprint. The app-driven merge, preservation, readback, and key-only access flow was not run against the SoC service."
+      "evidence": "A read-only live check confirmed the app-selected managed key is registered alongside one other key. The corrected authentication flow reached stu through sjump. No registrations were changed during this check; app-driven enrollment preservation was not independently executed during this diagnosis."
     },
     "managed_key_passphrase_keychain_restart": {
       "passed": false,
-      "evidence": "Automated tests verify that the passphrase is not returned by the UI bridge and Keychain persistence is required before enrollment. A real managed key was not enrolled and unlocked after app restart."
+      "evidence": "A new diagnostic process unlocked the app-selected encrypted managed key using its fingerprint-scoped passphrase from Keychain and verified jump access. A complete app restart and enrollment workflow was not observed."
     }
   },
   "distribution": {
@@ -43,34 +43,47 @@
   },
   "artifact": {
     "file": "SimplyPrint-at-SoC-Universal.dmg",
-    "sha256": "6adbbd861fcb7c51e1661a0fd11998a9f51fa58952d012ed0255d4a75c0fda24",
+    "sha256": "78e12e5231b7fc2ece3f01681bff6dbd9ec89b9762ef5ae702c56402bd08a8c6",
     "dmg_integrity": "passed",
     "contents": "only SimplyPrint @ SoC.app",
-    "architectures": ["arm64", "x86_64"],
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
     "minimum_macos": "13.0",
     "bundle_version": "1.1.0",
     "bundle_build": "110",
     "ad_hoc_signature": "passed"
   },
   "maintainer_attestation": {
-    "date": "2026-10-13",
+    "date": "2026-10-14",
     "testing_statement": "Automated release checks passed; device-specific and live SoC checks below are explicitly marked incomplete.",
     "publication_authorization": "The maintainer requested publication of v1.1.0 using the existing ad-hoc distribution method.",
     "coverage_note": "No physical Intel or macOS 13 test, full visual/accessibility review, live print smoke test, app-driven SoC enrollment preservation check, or managed-key Keychain restart test is claimed. The supplied manual registration transcript is recorded as context, not as app validation."
   },
   "automated_checks": {
-    "go_race_tests": "passed with Go 1.27.2",
+    "go_race_tests": "passed with Go 1.27.2; loopback SSH fixtures completed with local-network test access",
     "go_vet": "passed with Go 1.27.2",
-    "native_pdf_bridge_frontend_tests": "passed; 25 UI tests passed",
-    "website_tests": "passed; 3 tests passed",
-    "jump_setup_ui_tests": "passed; automated cases cover statuses, coalescing, dismissal, cancellation, and account changes",
+    "native_pdf_bridge_frontend_tests": "passed; native PDF/bridge checks and 34 UI tests passed",
+    "website_tests": "passed; 3 tests passed, including removal of the Available now badge",
+    "jump_setup_ui_tests": "passed; cases cover accepted-key-plus-password, rejected keys without password fallback, a wrong password after key acceptance, complete destination verification, pending registration, coalescing, dismissal, cancellation, and account changes",
     "dependency_scan": "govulncheck: 0 reachable findings and 0 findings in imported packages; GO-2026-5932 affects unmaintained golang.org/x/crypto/openpgp, which is not imported or called",
     "dependency_integrity": "go mod verify passed",
     "source_scan": "passed",
-    "release_record_tests": "passed",
-    "app_only_dmg_contents": "passed",
+    "release_record_tests": "passed; 3 tests passed",
+    "app_only_dmg_contents": "passed; hdiutil verify passed and expected app-only DMG checksum recorded",
     "arm64_minimum_macos": "13.0",
     "x86_64_minimum_macos": "13.0",
     "local_launch": "not verified; a prior isolated launch attempt aborted with SIGABRT in the sandbox"
+  },
+  "live_jump_authentication": {
+    "date": "2026-10-13",
+    "passed": true,
+    "baseline": "The selected app-managed key was accepted with public-key partial success, then the jump server requested password authentication. The previous key-only check could not complete.",
+    "fixed_flow": "The selected key was accepted first, the saved SoC password completed the required next step, and the same jump session successfully authenticated to stu.",
+    "registered_keys": 2,
+    "registration_changes": false,
+    "credential_handling": "Password and encrypted-key passphrase were retrieved inside the diagnostic process from Keychain. No credential values were logged.",
+    "scope": "Observed on the current NUS/SoC connection. The alternate campus network was not separately retested."
   }
 }
