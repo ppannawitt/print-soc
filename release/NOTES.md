@@ -1,16 +1,27 @@
-SimplyPrint @ SoC v1.0.1 for macOS 13 or later, on Apple Silicon and Intel.
+SimplyPrint @ SoC v1.1.0 for macOS 13 or later, on Apple Silicon and Intel.
 
-- Corrects a packaging error in v1.0.0 that made the executable require macOS 26 despite advertising macOS 13 support.
-- Renames the app, window, menus, About panel and disk image to SimplyPrint @ SoC.
-- The DMG contains only `SimplyPrint @ SoC.app`; no loose text files or Applications shortcut.
-- Existing settings, Keychain credentials and print history remain compatible.
+## What’s new
 
-Download `SimplyPrint-at-SoC-Universal.dmg`, open it and drag the app into your Applications folder in Finder. Open the app from Applications.
+This release adds guided SSH-key enrollment for the SoC jump host. When direct SoC access is available, the app checks the selected key using key-only authentication. If jump access needs setup, users can enroll their selected key, choose another key, or create an encrypted managed Ed25519 key. Managed-key passphrases are generated randomly and stored in macOS Keychain by account and key fingerprint.
 
-**Signing status:** ad-hoc signed, not Developer ID signed and not notarized by Apple. If macOS says the developer cannot be verified, first try opening the app, then go to System Settings → Privacy & Security → Open Anyway, review the app name and choose Open. Follow [Apple’s opening guide](https://support.apple.com/en-gb/102445). Do not override a malware or damaged-app warning.
+Before enrollment, the app reads the current jump-key fingerprints and recovers matching public-key lines from local public-key files. It asks for any missing lines and stops if every registered key cannot be included or the configuration changes. It submits the complete merged list, verifies the service response and resulting fingerprints, then tests jump access. Interrupted results are checked before another enrollment can be attempted. Existing private-key files and saved credentials are preserved. Custom key selection, passphrase entry, public-key copying, and manual registration remain available.
 
-[Printing guide](https://ppannawitt.github.io/print-soc/printing.html) · [Manual SSH-key setup](https://ppannawitt.github.io/print-soc/ssh-keys.html)
+## Printing and network access
 
-Printing features include PDF preview and layout settings, a printer directory, jobs, queues, and owned-job cancellation. SSH-key registration remains manual. This is an independent student project, not an official NUS application.
+Print PDFs with the SimplyPrint @ SoC app for macOS or through SSH from Terminal or Command Prompt. On SoC campus, NUS Wi-Fi such as `nus_stu` provides direct access from most locations. COM2 and other campus locations without direct access require the SoC SSH jump host. Off-campus printing may require NUS VPN.
 
-Both executable slices and the app bundle now declare macOS 13.0. Automated checks and a local launch are verified; older macOS and physical Intel runtime checks have not been independently verified. The maintainer has authorized publication without Apple signing. The DMG checksum and release validation record are separate release assets.
+## Release history
+
+- **1.0.0 — Developmental:** early development release.
+- **1.0.1 — First launch:** first public launch of SimplyPrint @ SoC.
+- **1.1.0 — SSH jump-host setup:** guided automatic enrollment for the SoC SSH jump host.
+
+The app and package version are 1.1.0; the bundle build is 110. Windows is unchanged.
+
+Download `SimplyPrint-at-SoC-Universal.dmg`, open it, and drag the app into Applications in Finder.
+
+**Signing status:** ad-hoc signed, not Developer ID signed and not notarized by Apple. If macOS says the developer cannot be verified, first try opening the app, then go to System Settings → Privacy & Security → Open Anyway, review the app name, and choose Open. Follow [Apple’s opening guide](https://support.apple.com/en-gb/102445). Do not override a malware or damaged-app warning.
+
+[Printing guide](https://ppannawitt.github.io/print-soc/printing.html) · [SSH-key setup](https://ppannawitt.github.io/print-soc/ssh-keys.html)
+
+Automated checks and unresolved device-specific or live SoC checks are recorded in `release-validation.json`. This is an independent student project, not an official NUS application.

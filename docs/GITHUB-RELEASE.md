@@ -1,6 +1,7 @@
 # GitHub and website release
 
 Repository: https://github.com/ppannawitt/print-soc
+
 Website: https://ppannawitt.github.io/print-soc/
 
 The website is a static GitHub Pages site in `site/`. It has Download, Printing, and SSH keys pages. It uses no analytics, cookies, credentials, or printing backend. GitHub may retain ordinary hosting/request logs under its own privacy terms.
@@ -9,20 +10,20 @@ The website is a static GitHub Pages site in `site/`. It has Download, Printing,
 
 In repository Settings → Pages, select **GitHub Actions** as the build source. The Website workflow deploys `site/` when it changes on `main`, or when dispatched manually. No custom domain is required. Repository settings may require owner access.
 
-The home page queries GitHub’s public latest-release API. It enables the download only for a non-draft, non-prerelease version with the universal DMG, checksum, and `release-validation.json`. Development assets and release candidates never activate the main download. V1 is an explicitly authorized ad-hoc signed release; the website and release notes disclose that it is not Apple-notarized. A missing release or failed API request leaves the download unavailable and preserves the guides and Releases link. The app’s official download filename stays `SimplyPrint-at-SoC-Universal.dmg` across stable releases.
+The home page queries GitHub’s public latest-release API. It enables a download only for a non-draft, non-prerelease version with the universal DMG, checksum, and `release-validation.json`. Development assets and release candidates never activate the main download. The static link remains on the last published release until the new release assets are available. The app’s official download filename stays `SimplyPrint-at-SoC-Universal.dmg` across stable releases.
 
-## Prepare a public app release
+## Signed production release
 
-1. Complete every real-device and SoC check in `docs/RELEASE-READINESS.md` against the intended source. Run `python3 scripts/check-release-gates.py --fingerprint`, copy the result into `release/validation.json`, and record actual evidence for every check. Leave incomplete checks false. The fingerprint excludes the validation record itself so the record can be committed without invalidating it; code and test changes invalidate it.
-2. Configure a protected GitHub environment named `production`. Restrict deployments to `main` and add a required maintainer reviewer if available for the repository.
-3. Add environment secrets: `DEVELOPER_ID` (the full Developer ID Application identity), `DEVELOPER_ID_CERTIFICATE_BASE64` (P12 certificate export), `DEVELOPER_ID_CERTIFICATE_PASSWORD`, `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, and `NOTARY_PASSWORD` (app-specific Apple password). Keep these in GitHub Secrets, never in source or chat.
-4. Commit the completed validation record, review release notes, and dispatch **Production Mac release** from `main` with version `1.0.1`. The workflow tests and scans the source, imports the certificate into an ephemeral runner Keychain, builds the universal app, signs with hardened runtime, notarizes/staples the app and DMG, validates Gatekeeper, and uploads a draft release. It publishes only after all preceding steps pass. Signing material is removed even after failure.
-5. Verify the public release assets, checksum, download button, fresh download, and guide links. If release upload fails, any incomplete release stays a draft. Resolve it explicitly before retrying; the workflow does not overwrite an existing tag or release.
+The production workflow requires every manual release check, a protected GitHub `production` environment, a Developer ID certificate, and Apple notarization credentials. It tests and scans the source, builds the universal app, signs with hardened runtime, notarizes and staples the app and DMG, validates Gatekeeper, and uploads a draft release. It publishes only after all preceding steps pass. Signing material is removed even after failure.
 
-Local production packaging requires the same manual-validation gate plus a Developer ID identity and notarytool Keychain profile. `MODE=development VERSION=1.0.1 ./scripts/build-macos-app.sh` is for maintainer review only.
+Before dispatching it, run `python3 scripts/check-release-gates.py --fingerprint`, record actual evidence for every release check in `release/validation.json`, and commit the completed record with the intended source. Then dispatch **Production Mac release** from `main` with the desired version. The gate fails when source or validation evidence changes.
 
-## Unsigned v1 release — 8 October 2026
+Local production packaging requires the same validation gate plus a Developer ID identity and a `notarytool` Keychain profile. Use `MODE=production VERSION=1.1.0 DEVELOPER_ID='Developer ID Application: …' NOTARY_PROFILE='…' ./scripts/build-macos-app.sh` only when those credentials are configured.
 
-The maintainer reports thorough testing and explicitly authorized publication without Apple signing. Build this release using `MODE=unsigned VERSION=1.0.1 ./scripts/build-macos-app.sh`. This mode packages the normal app name and bundle identifier, uses ad-hoc signing, scans the bundle, and writes the DMG checksum. The DMG contains only the app bundle. Signing status and opening instructions are in the release notes and printing guide; this mode does not claim Developer ID, notarization, or Gatekeeper acceptance.
+## Authorized ad-hoc distribution for v1.1.0
 
-Create a draft `v1.0.1` release at the exact source commit, upload `SimplyPrint-at-SoC-Universal.dmg`, its `.sha256` file, and `release-validation.json`, verify uploaded digests, then publish it as latest. Keep the maintainer attestation distinct from independently observed device-specific checks. The signed production workflow above remains available and requires all its original signing and validation gates.
+The project maintainer explicitly authorized v1.1.0 distribution through the existing ad-hoc signed method. Build the universal app-only DMG with `MODE=unsigned VERSION=1.1.0 OUTPUT_DIR=/private/tmp/socprint-release ./scripts/build-macos-app.sh`. This creates the app bundle, DMG, and SHA-256 checksum without claiming Developer ID signing, notarization, or Gatekeeper acceptance. Include the current `release/validation.json` as a separate release asset and keep unverified device and SoC checks marked incomplete.
+
+Create a draft `v1.1.0` release at the exact source commit. Upload `SimplyPrint-at-SoC-Universal.dmg`, its `.sha256` file, and `release-validation.json`; verify the uploaded checksum, then publish it as latest. Confirm the website download and checksum resolve to the public assets, and test a fresh download. If release upload fails, leave any incomplete release as a draft and resolve it before retrying. Do not overwrite an existing tag or release.
+
+The website’s static download fallback should be updated to v1.1.0 only after the public assets exist. Deploy the website, then verify the latest-release API lookup, fresh DMG download, checksum, and guide links.

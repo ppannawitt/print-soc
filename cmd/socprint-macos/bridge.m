@@ -112,6 +112,15 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
 - (void)showAbout:(id)sender {
     [NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionApplicationName:@"SimplyPrint @ SoC",NSAboutPanelOptionApplicationVersion:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"],@"Copyright":@"Independent student project · No telemetry"}];
 }
+- (BOOL)isApprovedKeyPath:(NSString *)path {
+    if ([self.approvedKeys containsObject:path]) return YES;
+    NSArray<NSURL *> *directories = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask];
+    NSURL *base = directories.firstObject;
+    if (!base || path.length == 0) return NO;
+    NSString *managed = [[[base URLByAppendingPathComponent:@"socprint" isDirectory:YES] path] stringByStandardizingPath];
+    NSString *candidate = [path stringByStandardizingPath];
+    return [candidate hasPrefix:[managed stringByAppendingString:@"/"]];
+}
 - (void)applicationWillTerminate:(NSNotification *)notification {
     dispatch_sync(self.pdfQueue, ^{ [self.pdf close]; });
 }
@@ -190,7 +199,7 @@ static void deliverNativeResponse(NSString *requestID, BOOL ok, NSDictionary *da
         deliverNativeResponse(requestID,NO,nil,@"termsRequired",@"Review and accept the terms before continuing.");return;
     }
     if([@[@"saveCredentials",@"signOut",@"createKey",@"useKey"] containsObject:action]) self.accountRevision++;
-    if([body[@"KeyPath"] length] && ![self.approvedKeys containsObject:body[@"KeyPath"]]) {
+    if([body[@"KeyPath"] length] && ![self isApprovedKeyPath:body[@"KeyPath"]]) {
         deliverNativeResponse(requestID,NO,nil,@"invalidKey",@"Choose the key using the file picker again.");return;
     }
     if ([action isEqualToString:@"nativeAlert"]) {

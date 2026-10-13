@@ -33,12 +33,15 @@ const (
 )
 
 var (
-	ErrAuthentication = errors.New("SoC account authentication failed")
-	ErrNetwork        = errors.New("could not connect to the SoC Unix server")
-	ErrChangedHostKey = errors.New("the saved SSH host key changed; connection stopped")
-	ErrNoKey          = errors.New("jump access needs an enrolled SoC SSH key")
-	ErrKeyEnrollment  = errors.New("the SoC jump host rejected the SSH key; check that its public key is enrolled")
-	ErrKeyPassphrase  = errors.New("the selected SSH key could not be read or unlocked")
+	ErrAuthentication     = errors.New("SoC account authentication failed")
+	ErrNetwork            = errors.New("could not connect to the SoC Unix server")
+	ErrChangedHostKey     = errors.New("the saved SSH host key changed; connection stopped")
+	ErrNoKey              = errors.New("jump access needs an enrolled SoC SSH key")
+	ErrKeyEnrollment      = errors.New("the SoC jump host rejected the SSH key; check that its public key is enrolled")
+	ErrKeyPassphrase      = errors.New("the selected SSH key could not be read or unlocked")
+	ErrInvalidKey         = errors.New("the selected file is not a usable SSH private key")
+	ErrJumpKeysUnreadable = errors.New("the SoC SSH Key Service did not return a recognizable jump-key list")
+	ErrJumpKeysChanged    = errors.New("the registered jump keys changed; review them and try again")
 )
 
 type TrustRequired struct {
@@ -133,6 +136,13 @@ type QueueJob struct {
 	FileName string
 	Size     string
 	Raw      string
+}
+
+// JumpKeyConfig is the currently registered set of jump-host public keys.
+// Fingerprints are the only key material the SoC service exposes through show.
+type JumpKeyConfig struct {
+	Fingerprints []string
+	Output       string
 }
 
 // Client deliberately exposes only the operations the interactive app needs.
@@ -245,7 +255,11 @@ func (s *SSH) authMethods() ([]ssh.AuthMethod, error) {
 	if s.keyPath != "" {
 		signer, err := LoadPrivateKey(s.keyPath, s.keyPass)
 		if err != nil {
-			s.keyError = fmt.Errorf("%w: %v", ErrKeyPassphrase, err)
+			if isKeyPassphraseError(err) {
+				s.keyError = fmt.Errorf("%w: %v", ErrKeyPassphrase, err)
+			} else {
+				s.keyError = fmt.Errorf("%w: %v", ErrInvalidKey, err)
+			}
 		} else {
 			methods = append(methods, ssh.PublicKeys(signer))
 		}
@@ -347,7 +361,7 @@ func (s *SSH) completeHandshake(connection net.Conn, address string, clientConfi
 		if strings.Contains(strings.ToLower(err.Error()), "unable to authenticate") {
 			return nil, ErrAuthentication
 		}
-		return nil, fmt.Errorf("SSH handshake to %s failed: %w", address, err)
+		return nil, fmt.Errorf("%w: SSH handshake to %s failed: %v", ErrNetwork, address, err)
 	}
 	_ = connection.SetDeadline(time.Time{})
 	return ssh.NewClient(clientConnection, channels, requests), nil

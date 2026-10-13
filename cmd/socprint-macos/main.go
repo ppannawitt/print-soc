@@ -14,6 +14,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -43,24 +44,26 @@ import (
 var uiAssets embed.FS
 
 type uiRequest struct {
-	PrintSettings json.RawMessage
-	ID            string
-	Action        string
-	Username      string
-	Password      string
-	KeyPath       string
-	KeyPassphrase string
-	Passphrase    string
-	FilePath      string
-	PrinterID     string
-	Queue         string
-	FileName      string
-	PageRange     string
-	Copies        int
-	JobID         string
-	TermsVersion  string
-	Forget        bool
-	ClearKey      bool
+	PrintSettings        json.RawMessage
+	ID                   string
+	Action               string
+	Username             string
+	Password             string
+	KeyPath              string
+	KeyPassphrase        string
+	ExpectedFingerprints []string
+	AdditionalPublicKeys string
+	Passphrase           string
+	FilePath             string
+	PrinterID            string
+	Queue                string
+	FileName             string
+	PageRange            string
+	Copies               int
+	JobID                string
+	TermsVersion         string
+	Forget               bool
+	ClearKey             bool
 }
 
 type uiResponse struct {
@@ -72,19 +75,21 @@ type uiResponse struct {
 }
 
 type application struct {
-	accountMu     sync.Mutex
-	epoch         uint64
-	mu            sync.Mutex
-	settings      config.Settings
-	printers      []catalog.Printer
-	history       *store.Store
-	client        *transport.SSH
-	pendingClient *transport.SSH
-	pendingTrust  *transport.TrustRequired
-	username      string
-	password      string
-	keyPassphrase string
-	route         transport.Route
+	accountMu          sync.Mutex
+	epoch              uint64
+	mu                 sync.Mutex
+	settings           config.Settings
+	printers           []catalog.Printer
+	history            *store.Store
+	client             *transport.SSH
+	pendingClient      *transport.SSH
+	pendingTrust       *transport.TrustRequired
+	pendingJumpAction  string
+	pendingJumpRequest *uiRequest
+	username           string
+	password           string
+	keyPassphrase      string
+	route              transport.Route
 }
 
 var activeApp *application
@@ -180,7 +185,7 @@ func failure(id, code, message string, data any) uiResponse {
 
 func (a *application) handle(request uiRequest) {
 	switch request.Action {
-	case "saveCredentials", "signIn", "trustHost", "cancelTrust", "createKey", "getPublicKey", "useKey", "signOut", "shutdown":
+	case "saveCredentials", "signIn", "trustHost", "cancelTrust", "createKey", "getPublicKey", "useKey", "signOut", "shutdown", "checkJumpKey", "enrollJumpKey", "createAndEnrollKey":
 		a.accountMu.Lock()
 		defer a.accountMu.Unlock()
 	}
@@ -202,6 +207,12 @@ func (a *application) handle(request uiRequest) {
 		response = a.acceptTerms(request.ID, request.TermsVersion)
 	case "detectNetwork":
 		response = a.detectNetwork(request.ID)
+	case "checkJumpKey":
+		response = a.checkJumpKey(request.ID)
+	case "enrollJumpKey":
+		response = a.enrollJumpKey(request)
+	case "createAndEnrollKey":
+		response = a.createAndEnrollKey(request.ID)
 	case "saveCredentials":
 		response = a.saveCredentials(request)
 	case "signIn":
@@ -257,6 +268,8 @@ func (a *application) acceptTerms(id, version string) uiResponse {
 func (a *application) initialize(id string) uiResponse {
 	a.mu.Lock()
 	username, keyPath := a.settings.Username, a.settings.KeyPath
+	settings := a.settings
+	originalKeyPassphraseCount := len(settings.KeyPassphraseFingerprints)
 	acceptedTermsVersion := a.settings.TermsVersion
 	printers := a.printers
 	a.mu.Unlock()
@@ -264,8 +277,16 @@ func (a *application) initialize(id string) uiResponse {
 	if username != "" {
 		password, err := credentials.GetPassword(username)
 		savedPassword = err == nil && password != ""
-		passphrase, err := credentials.GetPassphrase(username)
+		migrateLegacyKeyPassphrase(username, keyPath, &settings)
+		passphrase, err := passphraseForKey(username, keyPath)
 		savedPassphrase = err == nil && passphrase != ""
+		if len(settings.KeyPassphraseFingerprints) != originalKeyPassphraseCount {
+			if config.Save(settings) == nil {
+				a.mu.Lock()
+				a.settings = settings
+				a.mu.Unlock()
+			}
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -299,6 +320,7 @@ func (a *application) initialize(id string) uiResponse {
 func (a *application) revealSecret(id, secret string) uiResponse {
 	a.mu.Lock()
 	username := a.settings.Username
+	keyPath := a.settings.KeyPath
 	epoch := a.epoch
 	termsAccepted := a.settings.TermsVersion == config.TermsVersion
 	a.mu.Unlock()
@@ -314,7 +336,7 @@ func (a *application) revealSecret(id, secret string) uiResponse {
 	case "password":
 		value, err = credentials.GetPassword(username)
 	case "keyPassphrase":
-		value, err = credentials.GetPassphrase(username)
+		value, err = passphraseForKey(username, keyPath)
 	default:
 		return failure(id, "invalidSecret", "That saved credential cannot be revealed.", nil)
 	}
@@ -366,7 +388,7 @@ func (a *application) saveCredentials(request uiRequest) uiResponse {
 	}
 	vaultWarning := ""
 	passwordSaved := hasPassword(username)
-	keyPassphraseSaved := hasKeyPassphrase(username)
+	keyPassphraseSaved := false
 	if request.Password != "" {
 		if err := credentials.SetPassword(username, request.Password); err != nil {
 			vaultWarning = "The Mac credential vault is unavailable. Your password will be used for this session only."
@@ -376,7 +398,21 @@ func (a *application) saveCredentials(request uiRequest) uiResponse {
 		}
 	}
 	if request.KeyPassphrase != "" {
-		if err := credentials.SetPassphrase(username, request.KeyPassphrase); err != nil {
+		fingerprint, fingerprintErr := transport.SelectedKeyFingerprint(settings.KeyPath, request.KeyPassphrase)
+		var saveErr error
+		if fingerprintErr == nil {
+			saveErr = credentials.SetPassphraseForKey(username, fingerprint, request.KeyPassphrase)
+			if saveErr == nil {
+				settings.KeyPassphraseFingerprints = addFingerprint(settings.KeyPassphraseFingerprints, fingerprint)
+				if err := config.Save(settings); err != nil {
+					saveErr = err
+				}
+			}
+		} else {
+			// Keep supporting a passphrase entered before a custom key is unlocked.
+			saveErr = credentials.SetPassphrase(username, request.KeyPassphrase)
+		}
+		if saveErr != nil {
 			keyPassphraseSaved = false
 			if vaultWarning == "" {
 				vaultWarning = "The key passphrase could not be saved in Keychain. You can enter it again when needed."
@@ -385,11 +421,9 @@ func (a *application) saveCredentials(request uiRequest) uiResponse {
 			keyPassphraseSaved = true
 		}
 	}
-	if oldKeyPath != settings.KeyPath && request.KeyPassphrase == "" {
-		if err := credentials.DeletePassphrase(username); err != nil {
-			vaultWarning = "The previous key passphrase could not be removed from Keychain. It will not be used for the selected key; clear the saved credential and retry."
-		}
-		keyPassphraseSaved = false
+	if request.KeyPassphrase == "" && settings.KeyPath != "" {
+		_, err := passphraseForKey(username, settings.KeyPath)
+		keyPassphraseSaved = err == nil
 	}
 	a.mu.Lock()
 	a.settings = settings
@@ -420,8 +454,8 @@ func (a *application) saveCredentials(request uiRequest) uiResponse {
 			a.mu.Unlock()
 		}
 	}
-	if request.KeyPassphrase == "" && oldKeyPath == settings.KeyPath {
-		if passphrase, err := credentials.GetPassphrase(username); err == nil {
+	if request.KeyPassphrase == "" && settings.KeyPath != "" {
+		if passphrase, err := passphraseForKey(username, settings.KeyPath); err == nil {
 			a.mu.Lock()
 			a.keyPassphrase = passphrase
 			a.mu.Unlock()
@@ -464,8 +498,8 @@ func (a *application) signIn(id, username, password, keyPath, keyPassphrase stri
 			password = stored
 		}
 	}
-	if keyPassphrase == "" {
-		if stored, err := credentials.GetPassphrase(username); err == nil {
+	if keyPassphrase == "" && keyPath != "" {
+		if stored, err := passphraseForKey(username, keyPath); err == nil {
 			keyPassphrase = stored
 		}
 	}
@@ -485,6 +519,7 @@ func (a *application) signIn(id, username, password, keyPath, keyPassphrase stri
 	printers := a.printers
 	oldPending := a.pendingClient
 	a.pendingClient, a.pendingTrust = nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
 	a.mu.Unlock()
 	if oldPending != nil {
 		_ = oldPending.Close()
@@ -501,6 +536,7 @@ func (a *application) signIn(id, username, password, keyPath, keyPassphrase stri
 		if errors.As(err, &trust) {
 			a.mu.Lock()
 			a.pendingClient, a.pendingTrust = client, trust
+			a.pendingJumpAction, a.pendingJumpRequest = "", nil
 			a.password, a.keyPassphrase = password, keyPassphrase
 			a.mu.Unlock()
 			return result(id, map[string]any{"NeedsTrust": true, "Host": trust.Host, "Fingerprint": trust.Fingerprint})
@@ -516,12 +552,59 @@ func (a *application) trustHost(id string) uiResponse {
 	a.mu.Lock()
 	client, trust := a.pendingClient, a.pendingTrust
 	username := a.settings.Username
+	jumpAction, jumpRequest := a.pendingJumpAction, a.pendingJumpRequest
 	a.mu.Unlock()
 	if client == nil || trust == nil {
 		return failure(id, "trustExpired", "That verification request expired. Return to Account and try connecting again.", nil)
 	}
 	if err := client.Trust(trust); err != nil {
+		_ = client.Close()
+		a.clearPendingJump()
 		return failure(id, "trustFailed", "The server identity could not be saved. Review Account and try again.", nil)
+	}
+	if jumpAction == "check" {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		err := client.CheckJumpKey(ctx)
+		cancel()
+		if err != nil {
+			var next *transport.TrustRequired
+			if errors.As(err, &next) {
+				a.rememberJumpTrust(client, next, "check", nil)
+				return result(id, map[string]any{"NeedsTrust": true, "Host": next.Host, "Fingerprint": next.Fingerprint})
+			}
+			_ = client.Close()
+			a.clearPendingJump()
+			if errors.Is(err, transport.ErrJumpKeyRejected) {
+				return result(id, map[string]any{"Status": "rejected"})
+			}
+			if errors.Is(err, transport.ErrKeyPassphrase) {
+				return result(id, map[string]any{"Status": "locked"})
+			}
+			if errors.Is(err, transport.ErrInvalidKey) {
+				return result(id, map[string]any{"Status": "invalidKey"})
+			}
+			if errors.Is(err, transport.ErrAuthentication) {
+				return result(id, map[string]any{"Status": "accountAuthentication"})
+			}
+			if errors.Is(err, transport.ErrNetwork) {
+				return result(id, map[string]any{"Status": "network"})
+			}
+			if errors.Is(err, transport.ErrChangedHostKey) {
+				return failure(id, "changedHostKey", "A saved SSH server identity changed. Verify it with SoC before continuing.", nil)
+			}
+			return result(id, map[string]any{"Status": "unavailable"})
+		}
+		_ = client.Close()
+		a.clearPendingJump()
+		return result(id, map[string]any{"Status": "ready"})
+	}
+	if jumpAction == "enroll" && jumpRequest != nil {
+		response := a.enrollJumpKeyWithClient(*jumpRequest, client, username, jumpRequest.KeyPath, jumpRequest.KeyPassphrase)
+		if !responseNeedsTrust(response) {
+			_ = client.Close()
+			a.clearPendingJump()
+		}
+		return response
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -537,6 +620,7 @@ func (a *application) trustHost(id string) uiResponse {
 		_ = client.Close()
 		a.mu.Lock()
 		a.pendingClient, a.pendingTrust = nil, nil
+		a.pendingJumpAction, a.pendingJumpRequest = "", nil
 		a.mu.Unlock()
 		code, message := loginError(err)
 		return failure(id, code, message, nil)
@@ -548,6 +632,7 @@ func (a *application) finishLogin(id string, client *transport.SSH, route transp
 	a.mu.Lock()
 	oldClient := a.client
 	a.client, a.pendingClient, a.pendingTrust = client, nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
 	a.username, a.route = username, route
 	vaultWarning := ""
 	if password, err := credentials.GetPassword(username); err != nil || password == "" {
@@ -573,6 +658,8 @@ func loginError(err error) (string, string) {
 		return "keyEnrollment", "The jump host did not accept this SSH key. Confirm that its public key is enrolled with SoC, then update or select the key in Account."
 	case errors.Is(err, transport.ErrKeyPassphrase):
 		return "keyPassphrase", "This SSH key could not be unlocked. Enter the correct key passphrase or select another key in Account."
+	case errors.Is(err, transport.ErrInvalidKey):
+		return "invalidKey", "The selected file is not a usable SSH private key. Choose the private key file or select another key in Account."
 	case errors.Is(err, transport.ErrAuthentication):
 		return "authentication", "SoC did not accept this username/password. Edit the credentials in Account and try again. If the account is new, check that Unix access is enabled."
 	case errors.Is(err, transport.ErrNetwork):
@@ -586,6 +673,7 @@ func (a *application) cancelTrust(id string) uiResponse {
 	a.mu.Lock()
 	client := a.pendingClient
 	a.pendingClient, a.pendingTrust = nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
 	a.mu.Unlock()
 	if client != nil {
 		_ = client.Close()
@@ -649,18 +737,27 @@ func (a *application) createKey(id, passphrase string) uiResponse {
 		_ = os.Remove(keyPath)
 		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not prepare the public key.", nil)
 	}
+	publicKeyLine := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPublic)))
+	if err := os.WriteFile(keyPath+".pub", []byte(publicKeyLine+"\n"), 0600); err != nil {
+		_ = os.Remove(keyPath)
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not save the public-key record.", nil)
+	}
+	fingerprint := ssh.FingerprintSHA256(sshPublic)
 	settings.KeyPath = keyPath
+	settings.KeyPassphraseFingerprints = addFingerprint(settings.KeyPassphraseFingerprints, fingerprint)
 	if err := config.Save(settings); err != nil {
 		_ = os.Remove(keyPath)
+		_ = os.Remove(keyPath + ".pub")
 		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not save the key location.", nil)
 	}
 	vaultWarning := ""
-	if err := credentials.SetPassphrase(username, passphrase); err != nil {
+	if err := credentials.SetPassphraseForKey(username, fingerprint, passphrase); err != nil {
 		vaultWarning = "Keychain could not save this key passphrase. You can enter it again when needed."
 	}
 	a.mu.Lock()
 	oldClient, oldPending := a.client, a.pendingClient
 	a.client, a.pendingClient, a.pendingTrust = nil, nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
 	a.route = transport.RouteUnknown
 	a.settings, a.keyPassphrase = settings, passphrase
 	a.epoch++
@@ -671,14 +768,416 @@ func (a *application) createKey(id, passphrase string) uiResponse {
 	if oldPending != nil {
 		_ = oldPending.Close()
 	}
-	publicKeyLine := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPublic)))
 	data := map[string]any{
 		"KeyPath": keyPath, "PublicKey": publicKeyLine,
+		"Fingerprint":  fingerprint,
 		"VaultWarning": vaultWarning, "ReplacedExistingKey": replacingSavedKey,
 		"ExistingKeyPreserved": existingKeyPreserved, "Disconnected": true,
 	}
-	data["ManualRegistrationRequired"] = true
 	return result(id, data)
+}
+
+func (a *application) checkJumpKey(id string) uiResponse {
+	client, _, _, _, err := a.connectionForSavedAccount("")
+	if err != nil {
+		return failure(id, "jumpCheckUnavailable", "Save your SoC account and SSH key in Account before checking jump access.", nil)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	err = client.CheckJumpKey(ctx)
+	if err == nil {
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "ready"})
+	}
+	var trust *transport.TrustRequired
+	if errors.As(err, &trust) {
+		a.rememberJumpTrust(client, trust, "check", nil)
+		return result(id, map[string]any{"NeedsTrust": true, "Host": trust.Host, "Fingerprint": trust.Fingerprint})
+	}
+	switch {
+	case errors.Is(err, transport.ErrNoKey):
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "noKey"})
+	case errors.Is(err, transport.ErrJumpKeyRejected):
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "rejected"})
+	case errors.Is(err, transport.ErrKeyPassphrase):
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "locked"})
+	case errors.Is(err, transport.ErrInvalidKey):
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "invalidKey"})
+	case errors.Is(err, transport.ErrAuthentication):
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "accountAuthentication"})
+	case errors.Is(err, transport.ErrChangedHostKey):
+		_ = client.Close()
+		return failure(id, "changedHostKey", "A saved SSH server identity changed. Verify it with SoC before continuing.", nil)
+	case errors.Is(err, transport.ErrNetwork):
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "network"})
+	default:
+		_ = client.Close()
+		return result(id, map[string]any{"Status": "unavailable"})
+	}
+}
+
+func (a *application) enrollJumpKey(request uiRequest) uiResponse {
+	client, username, keyPath, keyPassphrase, err := a.connectionForSavedAccount(request.KeyPath)
+	if err != nil {
+		return failure(request.ID, "enrollmentUnavailable", "Save your SoC username, password, and selected SSH key in Account before enrolling it.", nil)
+	}
+	request.KeyPath = keyPath
+	response := a.enrollJumpKeyWithClient(request, client, username, keyPath, keyPassphrase)
+	if !responseNeedsTrust(response) {
+		_ = client.Close()
+	}
+	return response
+}
+
+func (a *application) enrollJumpKeyWithClient(request uiRequest, client *transport.SSH, username, keyPath, keyPassphrase string) uiResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	defer cancel()
+	publicKey, err := publicKeyFromPrivateFile(keyPath, keyPassphrase)
+	if err != nil {
+		return failure(request.ID, "keyPassphrase", keyUnlockError(err), nil)
+	}
+	current, err := client.ShowJumpKeys(ctx)
+	if err != nil {
+		var trust *transport.TrustRequired
+		if errors.As(err, &trust) {
+			request.KeyPassphrase = keyPassphrase
+			a.rememberJumpTrust(client, trust, "enroll", &request)
+			return result(request.ID, map[string]any{"NeedsTrust": true, "Host": trust.Host, "Fingerprint": trust.Fingerprint})
+		}
+		if errors.Is(err, transport.ErrChangedHostKey) {
+			return failure(request.ID, "changedHostKey", "A saved SSH server identity changed. Verify it with SoC before continuing.", nil)
+		}
+		if errors.Is(err, transport.ErrNetwork) {
+			return failure(request.ID, "network", "The network interrupted SSH-key setup. Reconnect to SoC and try again.", map[string]any{"KeyPath": keyPath})
+		}
+		if errors.Is(err, transport.ErrAuthentication) {
+			return failure(request.ID, "accountAuthentication", "SoC did not accept the saved account password for SSH-key setup. Review Account and try again.", map[string]any{"KeyPath": keyPath})
+		}
+		return failure(request.ID, "keyServiceUnavailable", "The SoC SSH Key Service could not be reached or authenticated. Check your connection and try again.", map[string]any{"KeyPath": keyPath})
+	}
+	if len(request.ExpectedFingerprints) > 0 && !sameStrings(current.Fingerprints, request.ExpectedFingerprints) {
+		return failure(request.ID, "jumpKeysChanged", "The registered jump keys changed while setup was in progress. Refresh the setup and review the current keys.", nil)
+	}
+	availableKeys := discoverAuthorizedKeys(keyPath, publicKey)
+	availableKeys = append(availableKeys, strings.Split(request.AdditionalPublicKeys, "\n")...)
+	merged, missing, err := mergeRegisteredJumpKeys(current.Fingerprints, publicKey, availableKeys)
+	if err != nil {
+		return failure(request.ID, "invalidPublicKeys", err.Error(), nil)
+	}
+	if len(missing) > 0 {
+		return result(request.ID, map[string]any{
+			"NeedsPublicKeys": true, "MissingFingerprints": missing,
+			"ExpectedFingerprints": current.Fingerprints,
+		})
+	}
+	updated, err := client.EnrollJumpKeys(ctx, current.Fingerprints, merged)
+	if err != nil {
+		if errors.Is(err, transport.ErrJumpKeysChanged) {
+			return failure(request.ID, "jumpKeysChanged", "The registered jump keys changed before enrollment. Review them and try again.", nil)
+		}
+		data := map[string]any{"KeyPath": keyPath}
+		switch {
+		case errors.Is(err, transport.ErrNetwork):
+			return failure(request.ID, "network", "The network interrupted SSH-key setup. Your selected key is saved; reconnect to SoC and try again.", data)
+		case errors.Is(err, transport.ErrAuthentication):
+			return failure(request.ID, "accountAuthentication", "SoC did not accept the saved account password for SSH-key setup. Review Account and try again.", data)
+		case errors.Is(err, transport.ErrChangedHostKey):
+			return failure(request.ID, "changedHostKey", "A saved SSH server identity changed. Verify it with SoC before continuing.", data)
+		case errors.Is(err, transport.ErrJumpEnrollmentRejected):
+			return failure(request.ID, "enrollmentFailed", "The SoC SSH Key Service rejected this key list. Review the selected key and registered keys before trying a replacement.", data)
+		default:
+			return failure(request.ID, "enrollmentUncertain", "The update could not be confirmed. Check jump access before trying enrollment again.", data)
+		}
+	}
+	if err := client.CheckJumpKey(ctx); err != nil {
+		var trust *transport.TrustRequired
+		if errors.As(err, &trust) {
+			a.rememberJumpTrust(client, trust, "check", nil)
+			return result(request.ID, map[string]any{"NeedsTrust": true, "Host": trust.Host, "Fingerprint": trust.Fingerprint})
+		}
+		data := map[string]any{"Enrolled": true, "Fingerprints": updated.Fingerprints, "KeyPath": keyPath}
+		if errors.Is(err, transport.ErrNetwork) {
+			return failure(request.ID, "network", "The key was saved by SoC, but the connection ended before jump access could be checked. Retry when online.", data)
+		}
+		if errors.Is(err, transport.ErrAuthentication) {
+			return failure(request.ID, "accountAuthentication", "The key was saved by SoC, but SoC did not accept the saved account password for the destination server.", data)
+		}
+		if errors.Is(err, transport.ErrChangedHostKey) {
+			return failure(request.ID, "changedHostKey", "The key was saved by SoC, but a saved SSH server identity changed. Verify it with SoC before continuing.", data)
+		}
+		return failure(request.ID, "enrollmentUnverified", "The key was saved by SoC, but jump access could not be verified yet. Check the connection and try again.", data)
+	}
+	return result(request.ID, map[string]any{"Enrolled": true, "Ready": true, "Fingerprints": updated.Fingerprints, "KeyPath": keyPath, "Username": username})
+}
+
+func mergeRegisteredJumpKeys(currentFingerprints []string, selectedKey string, availableKeys []string) ([]string, []string, error) {
+	merged, represented, err := transport.MergeAuthorizedKeys(append(availableKeys, selectedKey))
+	if err != nil {
+		return nil, nil, err
+	}
+	selectedFingerprint, err := fingerprintForAuthorizedKey(selectedKey)
+	if err != nil {
+		return nil, nil, errors.New("the selected SSH key could not be verified")
+	}
+	allowed := make(map[string]struct{}, len(currentFingerprints)+1)
+	for _, fingerprint := range currentFingerprints {
+		allowed[fingerprint] = struct{}{}
+	}
+	allowed[selectedFingerprint] = struct{}{}
+	for fingerprint := range represented {
+		if _, ok := allowed[fingerprint]; !ok {
+			return nil, nil, errors.New("a supplied public key does not match the selected key or a key already registered with SoC")
+		}
+	}
+	missing := make([]string, 0)
+	for _, fingerprint := range currentFingerprints {
+		if _, ok := represented[fingerprint]; !ok {
+			missing = append(missing, fingerprint)
+		}
+	}
+	return merged, missing, nil
+}
+
+func (a *application) createAndEnrollKey(id string) uiResponse {
+	a.mu.Lock()
+	previousSettings := a.settings
+	username := a.settings.Username
+	a.mu.Unlock()
+	if username == "" {
+		return failure(id, "noAccount", "Save your SoC username and password in Account before setting up a key.", nil)
+	}
+	var randomPassphrase [32]byte
+	if _, err := rand.Read(randomPassphrase[:]); err != nil {
+		return failure(id, "keyCreateFailed", "SimplyPrint @ SoC could not prepare a secure key passphrase.", nil)
+	}
+	created := a.createKey(id, base64.RawURLEncoding.EncodeToString(randomPassphrase[:]))
+	if !created.OK {
+		return created
+	}
+	data := created.Data.(map[string]any)
+	if data["VaultWarning"] != "" {
+		path := data["KeyPath"].(string)
+		fingerprint := data["Fingerprint"].(string)
+		_ = os.Remove(path)
+		_ = os.Remove(path + ".pub")
+		_ = credentials.DeletePassphraseForKey(username, fingerprint)
+		previousSettings.KeyPassphraseFingerprints = removeFingerprint(previousSettings.KeyPassphraseFingerprints, fingerprint)
+		_ = config.Save(previousSettings)
+		a.mu.Lock()
+		a.settings, a.keyPassphrase = previousSettings, ""
+		a.mu.Unlock()
+		return failure(id, "keychainUnavailable", "The new key passphrase could not be saved in Keychain, so the key was not enrolled. Check Keychain and try again.", nil)
+	}
+	request := uiRequest{ID: id, KeyPath: data["KeyPath"].(string)}
+	client, activeUsername, keyPath, keyPassphrase, err := a.connectionForSavedAccount(request.KeyPath)
+	if err != nil {
+		return failure(id, "enrollmentUnavailable", "The key was created securely, but setup could not connect to SoC. Retry setup from Account when you are online.", map[string]any{"KeyPath": request.KeyPath, "NewKeyCreated": true, "Disconnected": true})
+	}
+	response := a.enrollJumpKeyWithClient(request, client, activeUsername, keyPath, keyPassphrase)
+	if !responseNeedsTrust(response) {
+		_ = client.Close()
+	}
+	data, ok := response.Data.(map[string]any)
+	if !ok {
+		data = make(map[string]any)
+		response.Data = data
+	}
+	data["KeyPath"] = request.KeyPath
+	data["NewKeyCreated"] = true
+	data["Disconnected"] = true
+	return response
+}
+
+func (a *application) connectionForSavedAccount(keyPathOverride string) (*transport.SSH, string, string, string, error) {
+	a.mu.Lock()
+	settings, username := a.settings, a.settings.Username
+	password, keyPassphrase := a.password, a.keyPassphrase
+	printers := a.printers
+	a.mu.Unlock()
+	keyPath := settings.KeyPath
+	if keyPathOverride != "" {
+		keyPath = keyPathOverride
+	}
+	if password == "" {
+		password, _ = credentials.GetPassword(username)
+	}
+	if keyPassphrase == "" && keyPath != "" {
+		keyPassphrase, _ = passphraseForKey(username, keyPath)
+	}
+	if username == "" || password == "" {
+		return nil, username, keyPath, keyPassphrase, errors.New("account credentials are unavailable")
+	}
+	client, err := transport.New(username, password, keyPath, printers, keyPassphrase)
+	return client, username, keyPath, keyPassphrase, err
+}
+
+func responseNeedsTrust(response uiResponse) bool {
+	if !response.OK {
+		return false
+	}
+	data, _ := response.Data.(map[string]any)
+	needsTrust, _ := data["NeedsTrust"].(bool)
+	return needsTrust
+}
+
+func (a *application) rememberJumpTrust(client *transport.SSH, trust *transport.TrustRequired, action string, request *uiRequest) {
+	a.mu.Lock()
+	old := a.pendingClient
+	a.pendingClient, a.pendingTrust = client, trust
+	a.pendingJumpAction, a.pendingJumpRequest = action, request
+	a.mu.Unlock()
+	if old != nil && old != client {
+		_ = old.Close()
+	}
+}
+
+func (a *application) clearPendingJump() {
+	a.mu.Lock()
+	a.pendingClient, a.pendingTrust = nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
+	a.mu.Unlock()
+}
+
+func passphraseForKey(username, keyPath string) (string, error) {
+	if username == "" || keyPath == "" {
+		return "", errors.New("no selected key")
+	}
+	fingerprint := ""
+	if publicLine, err := readAuthorizedKey(keyPath + ".pub"); err == nil {
+		fingerprint, _ = fingerprintForAuthorizedKey(publicLine)
+	}
+	if fingerprint == "" {
+		legacy, _ := credentials.GetPassphrase(username)
+		if legacy != "" {
+			fingerprint, _ = transport.SelectedKeyFingerprint(keyPath, legacy)
+		}
+	}
+	return credentials.GetPassphraseForKey(username, fingerprint)
+}
+
+func migrateLegacyKeyPassphrase(username, keyPath string, settings *config.Settings) {
+	legacy, err := credentials.GetPassphrase(username)
+	if err != nil || legacy == "" || keyPath == "" {
+		return
+	}
+	fingerprint, err := transport.SelectedKeyFingerprint(keyPath, legacy)
+	if err != nil || credentials.SetPassphraseForKey(username, fingerprint, legacy) != nil {
+		return
+	}
+	settings.KeyPassphraseFingerprints = addFingerprint(settings.KeyPassphraseFingerprints, fingerprint)
+	if config.Save(*settings) == nil {
+		_ = credentials.DeletePassphrase(username)
+	}
+}
+
+func addFingerprint(fingerprints []string, fingerprint string) []string {
+	for _, existing := range fingerprints {
+		if existing == fingerprint {
+			return fingerprints
+		}
+	}
+	return append(fingerprints, fingerprint)
+}
+
+func removeFingerprint(fingerprints []string, fingerprint string) []string {
+	result := fingerprints[:0]
+	for _, existing := range fingerprints {
+		if existing != fingerprint {
+			result = append(result, existing)
+		}
+	}
+	return result
+}
+
+func readAuthorizedKey(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > 64*1024 {
+		return "", errors.New("invalid public-key file")
+	}
+	contents, err := io.ReadAll(file)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(contents), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, _, rest, parseErr := ssh.ParseAuthorizedKey([]byte(line)); parseErr == nil && len(strings.TrimSpace(string(rest))) == 0 {
+			return line, nil
+		}
+	}
+	return "", errors.New("public-key file did not contain one valid key line")
+}
+
+func fingerprintForAuthorizedKey(line string) (string, error) {
+	public, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(line)))
+	if err != nil || len(strings.TrimSpace(string(rest))) != 0 {
+		return "", errors.New("invalid authorized-key line")
+	}
+	return ssh.FingerprintSHA256(public), nil
+}
+
+func discoverAuthorizedKeys(selectedPath, selectedLine string) []string {
+	keys := []string{selectedLine}
+	paths := []string{selectedPath + ".pub"}
+	if home, err := os.UserHomeDir(); err == nil {
+		if matches, _ := filepath.Glob(filepath.Join(home, ".ssh", "*.pub")); len(matches) > 0 {
+			paths = append(paths, matches...)
+		}
+	}
+	if directory, err := config.Directory(); err == nil {
+		if matches, _ := filepath.Glob(filepath.Join(directory, "*.pub")); len(matches) > 0 {
+			paths = append(paths, matches...)
+		}
+	}
+	seen := make(map[string]struct{})
+	for _, path := range paths {
+		line, err := readAuthorizedKey(path)
+		if err != nil {
+			continue
+		}
+		fingerprint, err := fingerprintForAuthorizedKey(line)
+		if err != nil {
+			continue
+		}
+		if _, exists := seen[fingerprint]; exists {
+			continue
+		}
+		seen[fingerprint] = struct{}{}
+		keys = append(keys, line)
+	}
+	return keys
+}
+
+func sameStrings(first, second []string) bool {
+	if len(first) != len(second) {
+		return false
+	}
+	seen := make(map[string]int, len(first))
+	for _, value := range first {
+		seen[value]++
+	}
+	for _, value := range second {
+		seen[value]--
+	}
+	for _, count := range seen {
+		if count != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // Public-key export is local only. Registration with SoC is performed by the user.
@@ -690,7 +1189,7 @@ func (a *application) getPublicKey(id string) uiResponse {
 		return failure(id, "noKey", "Create or choose an SSH key first.", nil)
 	}
 	if passphrase == "" && username != "" {
-		passphrase, _ = credentials.GetPassphrase(username)
+		passphrase, _ = passphraseForKey(username, path)
 	}
 	publicKey, err := publicKeyFromPrivateFile(path, passphrase)
 	if err != nil {
@@ -1008,7 +1507,9 @@ func (a *application) signOut(id string, forget bool) uiResponse {
 	a.mu.Lock()
 	client, pending := a.client, a.pendingClient
 	username, settings := a.username, a.settings
+	fingerprints := append([]string(nil), settings.KeyPassphraseFingerprints...)
 	a.client, a.pendingClient, a.pendingTrust = nil, nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
 	a.password, a.keyPassphrase, a.route = "", "", transport.RouteUnknown
 	a.epoch++
 	a.mu.Unlock()
@@ -1022,7 +1523,12 @@ func (a *application) signOut(id string, forget bool) uiResponse {
 		if err := credentials.DeletePassword(username); err != nil {
 			return failure(id, "vaultDeleteFailed", "Keychain could not remove the saved password. Retry Forget credentials.", nil)
 		}
-		if err := credentials.DeletePassphrase(username); err != nil {
+		var passphraseDeleteErr error
+		for _, fingerprint := range fingerprints {
+			passphraseDeleteErr = errors.Join(passphraseDeleteErr, credentials.DeletePassphraseForKey(username, fingerprint))
+		}
+		passphraseDeleteErr = errors.Join(passphraseDeleteErr, credentials.DeletePassphrase(username))
+		if passphraseDeleteErr != nil {
 			return failure(id, "vaultDeleteFailed", "Keychain could not remove the saved key passphrase. Retry Forget credentials.", nil)
 		}
 		settings = config.Settings{TermsVersion: settings.TermsVersion}
@@ -1042,6 +1548,7 @@ func (a *application) close() {
 	a.mu.Lock()
 	client, pending := a.client, a.pendingClient
 	a.client, a.pendingClient, a.pendingTrust = nil, nil, nil
+	a.pendingJumpAction, a.pendingJumpRequest = "", nil
 	a.password, a.keyPassphrase = "", ""
 	a.mu.Unlock()
 	if client != nil {

@@ -2,7 +2,7 @@
 set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${MODE:-development}"
-version="${VERSION:-1.0.1}"
+version="${VERSION:-1.1.0}"
 output_dir="${OUTPUT_DIR:-$project_root/dist}"
 go_command="${GO:-$(command -v go || true)}"
 if [[ -z "$go_command" && -x /usr/local/go/bin/go ]]; then go_command=/usr/local/go/bin/go; fi
@@ -27,7 +27,7 @@ app="$build_work/$app_name.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$project_root/macos/Info.plist" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 101' "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 110' "$app/Contents/Info.plist"
 if [[ "$mode" == development ]]; then
   /usr/libexec/PlistBuddy -c 'Set :CFBundleName SimplyPrint @ SoC (Development)' "$app/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName SimplyPrint @ SoC (Development)' "$app/Contents/Info.plist"

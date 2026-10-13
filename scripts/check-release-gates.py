@@ -8,7 +8,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECKS = ('apple_silicon_install_upgrade', 'intel_install_upgrade', 'macos_13',
-          'visual_keyboard_voiceover', 'real_soc_print_queue_cancel', 'keychain_account_switching')
+          'visual_keyboard_voiceover', 'real_soc_print_queue_cancel', 'keychain_account_switching',
+          'real_soc_jump_enrollment_preservation', 'managed_key_passphrase_keychain_restart')
 
 
 def source_fingerprint():
@@ -39,7 +40,7 @@ def validate(record, version):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fingerprint', action='store_true')
-    parser.add_argument('--version', default='1.0.1')
+    parser.add_argument('--version', default='1.1.0')
     args = parser.parse_args()
     if args.fingerprint:
         print(source_fingerprint())

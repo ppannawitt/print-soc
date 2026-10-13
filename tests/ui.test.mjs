@@ -110,19 +110,77 @@ test('printer directory renders the complete catalog, search and restricted acce
 });
 
 
-test('v1 account offers manual registration without a registration action',()=>{
+test('account keeps custom key controls and exposes jump access status',()=>{
   const h=harness();h.run('state.keyPath="/fixture/key"');
   const html=h.run('renderAccount()');
   assert.ok(html.includes('Copy public key'));assert.ok(html.includes('SSH key guide'));
-  assert.ok(!html.includes('data-action="registerKey"'));assert.ok(!html.includes('Registered with SoC'));
+  assert.ok(html.includes('Check jump access'));assert.ok(html.includes('Choose existing key'));
 });
-test('key creation never starts a connection or automatic registration',async()=>{
+test('jump setup banner offers automatic enrollment, custom keys and dismissal',()=>{
+  const h=harness();h.run('state.jumpSetup={Status:"noKey"}');
+  const html=h.run('renderJumpSetupBanner()');
+  assert.ok(html.includes('You don’t have an SSH key set up.'));
+  assert.ok(html.includes('data-action="autoEnrollJumpKey"'));
+  assert.ok(html.includes('data-action="chooseKeyForJump"'));
+  assert.ok(html.includes('data-action="dismissJumpSetup"'));
+});
+test('jump setup distinguishes rejected keys, failed enrollment, locked keys and network errors',()=>{
+  const h=harness();
+  h.run('state.jumpSetup={Status:"rejected"}');
+  let html=h.run('renderJumpSetupBanner()');
+  assert.ok(html.includes('Enroll this key'));assert.ok(!html.includes('Create a new key'));
+  h.run('state.jumpSetup={Status:"enrollmentFailed"}');html=h.run('renderJumpSetupBanner()');
+  assert.ok(html.includes('Create a new key'));assert.ok(html.includes('Choose another key'));assert.ok(html.includes('Later'));
+  h.run('state.jumpSetup={Status:"locked"}');html=h.run('renderJumpSetupBanner()');
+  assert.ok(html.includes('passphrase'));assert.ok(!html.includes('autoEnrollJumpKey'));
+  h.run('state.jumpSetup={Status:"network"}');html=h.run('renderJumpSetupBanner()');
+  assert.ok(html.includes('Retry check'));assert.ok(!html.includes('autoEnrollJumpKey'));
+});
+test('missing registered public keys are requested before enrollment continues',()=>{
+  const h=harness();h.run('state.jumpMissingFingerprints=["SHA256:oldkey"]');
+  const html=h.run('renderJumpPublicKeyForm()');
+  assert.ok(html.includes('SHA256:oldkey'));assert.ok(html.includes('id="jump-public-keys"'));
+  assert.ok(html.includes('data-action="submitJumpPublicKeys"'));
+});
+test('background jump checks coalesce and a session dismissal suppresses the banner',async()=>{
+  const h=harness();h.run('state.connected=true;state.route="Direct";scheduleJumpCheck();scheduleJumpCheck();');
+  const scheduled=[...h.timers.entries()].find(([,fn])=>fn&&String(fn).includes('checkJumpAccess'));
+  assert.ok(scheduled);scheduled[1]();await tick();
+  const checks=h.messages.filter(m=>m.Action==='checkJumpKey');assert.equal(checks.length,1);
+  h.reply(checks[0],true,{Status:'noKey'});await tick();assert.equal(h.run('state.jumpSetup.Status'),'noKey');
+  h.run('state.jumpDismissed=true;');assert.equal(h.run('renderJumpSetupBanner()'),'');
+});
+test('account edits invalidate a pending jump-key check result',async()=>{
+  const h=harness();h.run('state.connected=true;state.route="Direct";');
+  const done=h.run('checkJumpAccess(true)');const check=h.messages.find(m=>m.Action==='checkJumpKey');assert.ok(check);
+  h.run('operations.changeAccount();invalidateJumpSetup();');
+  h.reply(check,true,{Status:'rejected'});await done;
+  assert.equal(h.run('state.jumpSetup'),null);
+});
+test('cancelling a missing-key prompt discards supplied lines without enrolling them',()=>{
+  const h=harness();h.run('state.jumpMissingFingerprints=["SHA256:old"];state.jumpExpectedFingerprints=["SHA256:old"];state.jumpPublicKeyDraft="ssh-ed25519 fixture";');
+  h.click('cancelJumpEnrollment');
+  assert.deepEqual(JSON.parse(JSON.stringify(h.run('state.jumpMissingFingerprints'))),[]);
+  assert.equal(h.run('state.jumpPublicKeyDraft'),'');
+  assert.equal(h.messages.some(message=>message.Action==='enrollJumpKey'),false);
+});
+test('creating and enrolling a managed key never sends its passphrase to the UI bridge',async()=>{
+  const h=harness();h.run('saveAccount=async()=>true;state.jumpSetup={Status:"noKey"};');
+  const done=h.click('autoEnrollJumpKey');await tick();
+  const enroll=h.messages.find(m=>m.Action==='createAndEnrollKey');assert.ok(enroll);
+  assert.equal(enroll.Passphrase,undefined);assert.equal(enroll.KeyPassphrase,undefined);
+  h.reply(enroll,true,{Enrolled:true,Ready:true,KeyPath:'/managed/key',NewKeyCreated:true,Disconnected:true});
+  await done;
+  assert.equal(h.run('state.keyPath'),'/managed/key');assert.equal(h.run('state.connected'),false);
+  assert.equal(h.run('state.jumpSetup.Status'),'ready');
+});
+test('key creation leaves registration to the explicit setup action',async()=>{
   const h=harness();h.run('navigate("Account");saveAccount=async()=>true;document.getElementById=id=>({value:"fixture-passphrase"});');
   const done=h.click('createKey');await tick();const create=h.messages.find(m=>m.Action==='createKey');assert.ok(create);
-  h.reply(create,true,{KeyPath:'/fixture/key',PublicKey:'ssh-ed25519 fixture',ManualRegistrationRequired:true,Disconnected:true});await done;await tick();
+  h.reply(create,true,{KeyPath:'/fixture/key',PublicKey:'ssh-ed25519 fixture',Disconnected:true});await done;await tick();
   assert.ok(h.messages.every(m=>['createKey','nativeAlert'].includes(m.Action)));
   assert.equal(h.run('state.connected'),false);assert.equal(h.run('state.trust'),null);
-  assert.ok(h.messages.find(m=>m.Action==='nativeAlert').Message.includes('manually'));
+  assert.ok(h.messages.find(m=>m.Action==='nativeAlert').Message.includes('Enroll it with the SoC SSH Key Service'));
 });
 test('copying an existing public key uses local export after saving the account',async()=>{
   const h=harness();h.run('navigate("Account");state.keyPath="/fixture/key";');

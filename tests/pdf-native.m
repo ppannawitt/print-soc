@@ -25,7 +25,11 @@ int main(){@autoreleasepool{
     check(!SPValidRequest(@{@"ID":@"1",@"Action":@"submitPrint",@"FilePath":@"/etc/passwd"}),@"arbitrary paths rejected");
     check(!SPValidRequest(@{@"ID":@"1",@"Action":@"previewPDF",@"Options":@"bad"}),@"malformed request rejected");
     check(SPValidRequest(@{@"ID":@"1",@"Action":@"previewPDF",@"DocumentHandle":@"doc",@"Options":options(@"",@"A4",@"portrait",@"fit",@1),@"Sheet":@0}),@"valid preview request permitted");
-    check(!SPValidRequest(@{@"ID":@"1",@"Action":@"registerKey"}),@"automatic registration action removed");
+    check(!SPValidRequest(@{@"ID":@"1",@"Action":@"registerKey"}),@"unknown key action rejected");
+    check(SPValidRequest(@{@"ID":@"1",@"Action":@"checkJumpKey"}),@"jump-key check action allowed");
+    check(SPValidRequest(@{@"ID":@"1",@"Action":@"enrollJumpKey",@"ExpectedFingerprints":@[@"SHA256:existing"],@"AdditionalPublicKeys":@"ssh-ed25519 AAAA"}),@"bounded jump-key enrollment request allowed");
+    check(SPValidRequest(@{@"ID":@"1",@"Action":@"createAndEnrollKey"}),@"managed-key enrollment action allowed");
+    check(!SPValidRequest(@{@"ID":@"1",@"Action":@"enrollJumpKey",@"ExpectedFingerprints":@"invalid"}),@"malformed expected fingerprints rejected");
     check(SPValidRequest(@{@"ID":@"1",@"Action":@"getPublicKey"}),@"local public-key export allowed");
     check(!SPValidRequest(@{@"ID":@"1",@"Action":@"arbitraryAction"}),@"unknown action rejected");
     check(!SPValidRequest(@{@"ID":@"1",@"Action":@"submitPrint"}),@"missing prepared handle rejected");

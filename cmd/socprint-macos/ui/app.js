@@ -4,6 +4,8 @@ const state = {
   page:"Print", printers:[], username:"", formUsername:"", keyPath:"", hasPassword:false,
   hasKeyPassphrase:false, connected:false, route:"", network:null, busy:"",
   accountError:null, accountNotice:"", trust:null, generatedPublicKey:"",
+  jumpSetup:null, jumpDismissed:false, jumpChecking:false, jumpEnrollment:false,
+  jumpExpectedFingerprints:[], jumpMissingFingerprints:[], jumpPublicKeyDraft:"",
   formPassword:"", formKeyPassphrase:"", filePath:"", fileName:"", fileSize:0,
   pageCount:0, pageRange:"", copies:"1",
   printAttemptInProgress:false, printHelpInFlight:false,
@@ -11,7 +13,7 @@ const state = {
   printStep:0, printer:null, queue:"", simplex:false, noBanner:false,
   printResult:null, printerSearch:"", directoryPrinter:"",
   jobs:[], queuePrinter:"", queueName:"", queueData:null, queueError:"",
-  includeRestricted:true, pageSearch:"", termsVersion:"2", termsAccepted:false,
+  includeRestricted:true, pageSearch:"", termsVersion:"3", termsAccepted:false,
   termsChecked:false, termsSaving:false,
   passwordVisible:false, keyPassphraseVisible:false,
   revealedSavedPassword:false, revealedSavedKeyPassphrase:false
@@ -200,13 +202,13 @@ function appShell() {
   if(!state.termsAccepted)return renderTerms();
   const pages=["Print","Printers","Jobs","Queues","Help"];
   const renderers={Print:renderPrint,Printers:renderPrinters,Jobs:renderJobs,Queues:renderQueues,Help:renderHelp,Account:renderAccount};
-  return '<div class="app"><aside class="sidebar"><div class="brand"><img src="socprint://app/logo.svg" alt=""><div><div class="brand-name">SimplyPrint @ SoC</div></div></div><nav aria-label="Main navigation">'+pages.map(page=>'<button class="nav-item '+(state.page===page?'active':'')+'" data-action="navigate" data-page="'+page+'" '+(state.page===page?'aria-current="page"':'')+'><span class="nav-icon" aria-hidden="true">'+icon(page)+'</span>'+page+'</button>').join('')+'</nav><div class="sidebar-bottom"><button class="account-mini '+(state.page==='Account'?'active':'')+'" data-action="navigate" data-page="Account"><span class="nav-icon" aria-hidden="true">'+icon('Account')+'</span>Account</button></div></aside><main class="main"><section class="content '+(state.page==='Print'&&!state.printResult?'print-content':state.page==='Queues'?'queue-content':'')+'">'+(renderers[state.page]||renderHelp)()+'</section></main></div>';
+  return '<div class="app"><aside class="sidebar"><div class="brand"><img src="socprint://app/logo.svg" alt=""><div><div class="brand-name">SimplyPrint @ SoC</div></div></div><nav aria-label="Main navigation">'+pages.map(page=>'<button class="nav-item '+(state.page===page?'active':'')+'" data-action="navigate" data-page="'+page+'" '+(state.page===page?'aria-current="page"':'')+'><span class="nav-icon" aria-hidden="true">'+icon(page)+'</span>'+page+'</button>').join('')+'</nav><div class="sidebar-bottom"><button class="account-mini '+(state.page==='Account'?'active':'')+'" data-action="navigate" data-page="Account"><span class="nav-icon" aria-hidden="true">'+icon('Account')+'</span>Account</button></div></aside><main class="main"><section class="content '+(state.page==='Print'&&!state.printResult?'print-content':state.page==='Queues'?'queue-content':'')+'">'+renderJumpSetupBanner()+(renderers[state.page]||renderHelp)()+'</section></main></div>';
 }
 function renderTerms() {
   return '<main class="terms-gate"><header class="terms-head"><p class="terms-kicker">SimplyPrint @ SoC</p><h1>Disclaimer and Terms of Use</h1><p>Review and accept these terms to continue.</p></header><article class="terms-copy">'+
     '<section><p>This software is built by fellow students, primarily to support students in the <strong>NUS School of Computing (SoC)</strong>. It is an independent student project and is <strong>not affiliated with, endorsed by, or officially supported by the National University of Singapore (NUS) or the NUS School of Computing</strong>.</p></section>'+
     '<section><h2>Use at Your Own Risk</h2><p>We do our best to make this software useful, accurate, and reliable, but mistakes or unexpected issues may still happen.</p><p>The software is provided <strong>“as is” and “as available”</strong>, without any guarantees regarding its accuracy, availability, security, or suitability for a particular purpose.</p><p>By using this software, you understand that you are doing so at your own risk. The developers are not responsible for any loss, damage, or other consequences that may result from using or relying on the software.</p></section>'+
-    '<section><h2>Privacy &amp; Security</h2><p>We respect your privacy. We do <strong>not intentionally collect or store your personal information</strong>, unless we clearly tell you otherwise.</p><p>As with any software, we still encourage users to avoid entering sensitive or confidential information unless necessary.</p><p>SimplyPrint @ SoC stores your username and print history locally on this Mac. Passwords and key passphrases are saved in macOS Keychain only when you choose to save them. The PDF you choose is uploaded to SoC servers to process your print job. SSH keys are created locally. You register your public key manually with SoC; the app never submits or changes the registered-key list. The app does not send these details to the project developers.</p></section>'+
+    '<section><h2>Privacy &amp; Security</h2><p>SimplyPrint @ SoC stores your username and print history locally on this Mac. Passwords and key passphrases are saved in macOS Keychain. The PDF you choose is uploaded to SoC servers to process your print job. SSH private keys are created locally and never sent to SoC. When you choose automatic SSH-key setup, the app sends the public-key lines you approve to SoC’s SSH Key Service to configure jump access. The app does not send these details to the project developers.</p></section>'+
     '<section><h2>Non-Commercial Use</h2><p>This project is made for <strong>personal and educational use</strong>.</p><p>Please do not sell, commercially redistribute, or use this software as part of a commercial product or service without first obtaining permission from the developers.</p></section>'+
     '<section><h2>Attribution</h2><p>You’re welcome to learn from, reference, or build upon this project for educational purposes.</p><p>If you use the software, source code, or materials from this project in your own work, please provide <strong>appropriate acknowledgement and citation</strong> to the original project and its developers.</p></section></article>'+
     '<footer class="terms-footer"><label class="terms-agree"><input id="terms-agree" type="checkbox" '+(state.termsChecked?"checked":"")+'><span>I have read and agree to the Disclaimer and Terms of Use.</span></label><div class="terms-actions"><button class="btn primary" data-action="acceptTerms" '+(!state.termsChecked||state.termsSaving?"disabled":"")+'>'+(state.termsSaving?"Saving…":"Accept and continue")+'</button><button class="btn" data-action="quitApp">Quit</button></div></footer></main>';
@@ -215,10 +217,10 @@ function render() {
   const focused=document.activeElement,id=focused&&focused.id;
   const start=focused&&focused.selectionStart,end=focused&&focused.selectionEnd;
   const scrolls=Array.from(document.querySelectorAll('.content,.settings-pane,.preview-scroll,.printer-browser-list')).map(el=>[el.className,el.scrollTop]);
-  const drafts={};document.querySelectorAll('input').forEach(el=>{if(el.id&& !['checkbox','radio'].includes(el.type)) drafts[el.id]=el.value;});
+  const drafts={};document.querySelectorAll('input,textarea').forEach(el=>{if(el.id&& !['checkbox','radio'].includes(el.type)) drafts[el.id]=el.value;});
   document.getElementById('root').innerHTML=appShell();
   // Non-model draft fields (e.g. a new key passphrase) survive background updates.
-  for(const key of ['new-key-pass','confirm-key-pass']){const el=document.getElementById(key);if(el&&key in drafts)el.value=drafts[key];}
+  for(const key of ['new-key-pass','confirm-key-pass','jump-public-keys']){const el=document.getElementById(key);if(el&&key in drafts)el.value=drafts[key];}
   for(const [className,top] of scrolls){const el=Array.from(document.querySelectorAll('.content,.settings-pane,.preview-scroll,.printer-browser-list')).find(el=>el.className===className);if(el)el.scrollTop=top;}
   if(id){const el=document.getElementById(id);if(el){el.focus({preventScroll:true});if(typeof start==='number'&&['text','password','search'].includes(el.type))el.setSelectionRange(start,end);}}
 }
@@ -238,16 +240,32 @@ function renderAccount() {
       '</div><div class="btn-row">'+button(state.busy==="key"?(replacingKey?"Replacing…":"Creating…"):(replacingKey?"Replace key":"Create key"),"createKey","primary",state.busy==="key"?"disabled":"")+' '+button("Cancel","hideCreateKey","")+'</div></section>';
   }
 
-  return '<div class="page-head"><div><h1>Account</h1></div></div>'+
+  return '<div class="page-head"><div><h1>Account</h1></div></div>'+renderJumpPublicKeyForm()+
     '<div class="account-sections">'+'<div class="form-group account-status"><span>'+ (state.connected?'Connected · '+esc(state.route):'Not connected')+'</span><div class="btn-row">'+button(state.connected?'Disconnect':'Connect',state.connected?'disconnect':'connect','',state.busy?'disabled':'')+'</div></div><h2 class="group-title account-section-title">SoC account</h2><p class="account-create-note">If you do not have mySoC account yet, '+linkButton("create account here","https://mysoc.nus.edu.sg/~newacct/")+'.</p><div class="form-group">'+
     '<div class="form-row"><label for="username">Username</label><input id="username" type="text" value="'+esc(state.formUsername)+'" placeholder="SoC username" autocomplete="username"></div>'+
     '<div class="form-row"><label for="password">Password</label>'+secretField("password",state.formPassword,state.hasPassword?"Saved in Keychain":"SoC password",state.passwordVisible,"togglePassword",state.hasPassword?"saved SoC password · authenticate to reveal":"SoC password")+'</div></div>'+
 
     '<div class="group-actions">'+button(state.busy==="save"?"Saving…":"Save","saveCredentials","",state.busy==="save"?"disabled":"")+(state.hasPassword?button("Forget credentials","forgetCredentials","subtle danger"):"")+'</div>'+
-    '<h2 class="group-title account-section-title key-section-title">SSH key</h2><div class="key-settings">'+
+    '<h2 class="group-title account-section-title key-section-title">SSH key</h2><div class="jump-access-row"><div><strong>SoC jump host</strong><p>'+(state.jumpSetup&&state.jumpSetup.Status==="ready"?"Ready for printing from other campus locations.":state.jumpChecking?"Checking your selected key…":"Check or set up printing from outside the SoC network.")+'</p></div>'+button("Check jump access","checkJumpSetup","")+'</div><div class="key-settings">'+
     '<div class="key-file-row"><div class="key-file-copy"><span class="key-label">Private key file</span><code title="'+esc(state.keyPath)+'">'+esc(keyName)+'</code></div></div>'+
     '<div class="key-pass-row"><label for="key-pass">Key passphrase</label>'+secretField("key-pass",state.formKeyPassphrase,state.hasKeyPassphrase?"Saved in Keychain":"Passphrase",state.keyPassphraseVisible,"toggleKeyPassphrase",state.hasKeyPassphrase?"SSH key passphrase · authenticate to reveal":"SSH key passphrase")+'<span class="keychain-hint">'+(state.hasKeyPassphrase?"Saved · authenticate to reveal":"")+'</span></div>'+
-    keyActions+'<p class="account-create-note">Register your public key manually. '+linkButton("SSH key guide","https://ppannawitt.github.io/print-soc/ssh-keys.html")+'.</p>'+createForm+'</div></div>';
+    keyActions+'<p class="account-create-note">You can enroll automatically or follow the '+linkButton("SSH key guide","https://ppannawitt.github.io/print-soc/ssh-keys.html")+'.</p>'+createForm+'</div></div>';
+}
+function renderJumpSetupBanner() {
+  if(!state.jumpSetup||state.jumpDismissed||state.jumpMissingFingerprints.length)return "";
+  const status=state.jumpSetup.Status||"";
+  if(status==="ready"||status==="unavailable")return "";
+  if(status==="noKey")return '<section class="jump-setup" role="status"><div><strong>You don’t have an SSH key set up.</strong><p>Set one up to print from COM2 and other campus locations using the SoC jump host.</p></div><div class="btn-row">'+button(state.jumpEnrollment?"Setting up…":"Set up automatically","autoEnrollJumpKey","primary",state.jumpEnrollment?"disabled":"")+button("Use my own key","chooseKeyForJump","")+button("Later","dismissJumpSetup","link-btn")+'</div></section>';
+  if(status==="rejected"||status==="enrollmentFailed")return '<section class="jump-setup" role="status"><div><strong>Your current SSH key could not connect or be enrolled.</strong><p>Try enrolling this key, create a new one, or choose another key.</p></div><div class="btn-row">'+(status==="rejected"?button("Enroll this key","enrollJumpKey","primary",state.jumpEnrollment?"disabled":""):button("Create a new key","autoEnrollJumpKey","primary",state.jumpEnrollment?"disabled":""))+button("Choose another key","chooseKeyForJump","")+button("Later","dismissJumpSetup","link-btn")+'</div></section>';
+  if(status==="locked")return '<section class="jump-setup" role="status"><div><strong>Your SSH key needs its passphrase.</strong><p>Enter the key passphrase in Account, then check jump access again.</p></div><div class="btn-row">'+button("Open Account","goAccountJump","")+button("Later","dismissJumpSetup","link-btn")+'</div></section>';
+  if(status==="invalidKey")return '<section class="jump-setup" role="status"><div><strong>The selected file is not a usable SSH private key.</strong><p>Choose the matching private-key file in Account, then check jump access again.</p></div><div class="btn-row">'+button("Choose another key","chooseKeyForJump","")+button("Later","dismissJumpSetup","link-btn")+'</div></section>';
+  if(status==="network")return '<section class="jump-setup" role="status"><div><strong>Jump access could not be checked.</strong><p>SoC could not be reached just now. Check your connection and retry when direct access is available.</p></div><div class="btn-row">'+button("Retry check","checkJumpSetup","")+button("Later","dismissJumpSetup","link-btn")+'</div></section>';
+  if(status==="accountAuthentication")return '<section class="jump-setup" role="status"><div><strong>Check your saved SoC password.</strong><p>SoC did not accept the account password while checking jump access. Update it in Account, then try again.</p></div><div class="btn-row">'+button("Open Account","goAccountJump","")+button("Later","dismissJumpSetup","link-btn")+'</div></section>';
+  return "";
+}
+function renderJumpPublicKeyForm() {
+  if(!state.jumpMissingFingerprints.length)return "";
+  return '<section class="jump-key-form" aria-labelledby="jump-key-form-title"><h2 id="jump-key-form-title">Keep your existing SSH keys</h2><p>SoC lists these registered keys by fingerprint. Paste the matching public-key lines below so SimplyPrint can include them with your selected key.</p><ul>'+state.jumpMissingFingerprints.map(fp=>'<li><code>'+esc(fp)+'</code></li>').join("")+'</ul><label for="jump-public-keys">Existing public keys, one per line</label><textarea id="jump-public-keys" rows="5" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="ssh-ed25519 AAAA… comment">'+esc(state.jumpPublicKeyDraft)+'</textarea><div class="btn-row">'+button(state.jumpEnrollment?"Checking keys…":"Continue enrollment","submitJumpPublicKeys","primary",state.jumpEnrollment?"disabled":"")+button("Cancel","cancelJumpEnrollment","")+'</div></section>';
 }
 function stepper(current) {
   const labels=["PDF","Printer","Options","Review"];
@@ -398,7 +416,7 @@ function renderQueues() {
   return '<div class="queue-view"><div class="queue-controls"><select id="queue-select" aria-label="Printer queue"><option value="">Choose queue…</option>'+queues.map(x=>'<option value="'+esc(x.queue)+'" '+(x.queue===state.queueName?'selected':'')+'>'+esc(x.queue+' · '+x.printer.Location.replace(/\s*\([^)]*\)/g,''))+'</option>').join('')+'</select>'+refresh+'</div><div class="queue-body">'+(table||data&&!canRender?table||'<pre class="queue-output">'+esc(data.Output)+'</pre>':'<div class="queue-blank">'+icon('Queues')+'<span role="status">'+empty+'</span></div>')+'</div>'+(data?'<footer class="queue-footer"><span>'+jobs.length+' '+(jobs.length===1?'job':'jobs')+'</span><span>Updated '+new Date(data.CheckedAt).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})+'</span></footer>':'')+'</div>';
 }
 function renderHelp() {
-  return '<div class="page-head"><h1>Printing at SoC</h1></div><div class="help-grid"><section><h2>Getting started</h2><p>Choose a PDF, select a printer, then print.</p><div class="btn-row">'+linkButton('App &amp; manual printing guide','https://ppannawitt.github.io/print-soc/printing.html')+'</div><div class="btn-row">'+linkButton('Create SoC account','https://mysoc.nus.edu.sg/~newacct/')+' '+linkButton('Enable Unix access','https://mysoc.nus.edu.sg/~myacct/services.cgi')+'</div></section><section><h2>Connection and SSH keys</h2><p>Outside NUS, use NUS VPN. Register SSH keys manually before using the jump host.</p><div class="btn-row">'+linkButton('Network access guide','https://dochub.comp.nus.edu.sg/cf/guides/unix/outside-access')+' '+linkButton('SSH key guide','https://ppannawitt.github.io/print-soc/ssh-keys.html')+'</div></section><section><h2>Submission status</h2><p>Submitted confirms server acceptance. For an unknown outcome, check the queue before sending again.</p></section><section><h2>Privacy</h2><p>Credentials use Keychain. History and previews stay local. PDFs are sent only to SoC. No telemetry.</p><p>SimplyPrint @ SoC is an independent student project and is not an official NUS application.</p></section></div>';
+  return '<div class="page-head"><h1>Printing at SoC</h1></div><div class="help-grid"><section><h2>Getting started</h2><p>Choose a PDF, select a printer, then print.</p><div class="btn-row">'+linkButton('App &amp; manual printing guide','https://ppannawitt.github.io/print-soc/printing.html')+'</div><div class="btn-row">'+linkButton('Create SoC account','https://mysoc.nus.edu.sg/~newacct/')+' '+linkButton('Enable Unix access','https://mysoc.nus.edu.sg/~myacct/services.cgi')+'</div></section><section><h2>Connection and SSH keys</h2><p>On SoC Wi-Fi, the app checks your selected key and offers setup when needed. Outside NUS, use NUS VPN if required. You can also register a key manually.</p><div class="btn-row">'+linkButton('Network access guide','https://dochub.comp.nus.edu.sg/cf/guides/unix/outside-access')+' '+linkButton('SSH key guide','https://ppannawitt.github.io/print-soc/ssh-keys.html')+'</div></section><section><h2>Submission status</h2><p>Submitted confirms server acceptance. For an unknown outcome, check the queue before sending again.</p></section><section><h2>Privacy</h2><p>Credentials use Keychain. History and previews stay local. PDFs are sent only to SoC. No telemetry.</p><p>SimplyPrint @ SoC is an independent student project and is not an official NUS application.</p></section></div>';
 }
 
 function accountValues() {
@@ -432,6 +450,7 @@ async function saveAccount(options) {
     }
     state.hasPassword=!!d.HasPassword;
     state.hasKeyPassphrase=!!d.HasKeyPassphrase;
+    if(previousUsername!==state.username||previousKeyPath!==state.keyPath)invalidateJumpSetup();
     state.formPassword="";
     state.formKeyPassphrase="";
     state.passwordVisible=false;state.keyPassphraseVisible=false;
@@ -463,11 +482,120 @@ async function connectAccount(values,ctx) {
     if(!operations.current(ctx))return false;
     state.connected=true;state.username=d.Username||values.Username;state.formUsername=state.username;state.route=d.Route||'';state.accountError=null;state.accountNotice=d.VaultWarning||'';
     state.formPassword='';state.formKeyPassphrase='';
+    if(state.route==='Direct')scheduleJumpCheck();
     return true;
   }catch(e){
     if(operations.current(ctx)){state.connected=false;state.accountError=e;state.accountNotice='';if(ctx.kind==='queue')state.queueError=e.Error;else if(ctx.kind==='print')state.printError=e;notifyError(e,ctx.kind==='queue'?'queue':ctx.kind==='print'?'print':'account');}
     return false;
   }finally{operations.end(attempt);if(state.busy==='signIn')state.busy='';render();}
+}
+
+let jumpCheckPromise=null,jumpCheckTimer=null,lastJumpCheck=0;
+function invalidateJumpSetup() {
+  state.jumpSetup=null;state.jumpDismissed=false;state.jumpExpectedFingerprints=[];
+  state.jumpMissingFingerprints=[];state.jumpPublicKeyDraft="";lastJumpCheck=0;
+  if(jumpCheckTimer){clearTimeout(jumpCheckTimer);jumpCheckTimer=null;}
+}
+function applyJumpEnrollmentResult(data) {
+  if(data.KeyPath){state.keyPath=data.KeyPath;if(data.NewKeyCreated)state.hasKeyPassphrase=true;}
+  if(data.Disconnected){state.connected=false;state.route="";}
+}
+function scheduleJumpCheck(force=false) {
+  if(state.jumpDismissed||!state.termsAccepted||(!state.connected&&(!state.network||state.network.Route!=="Direct")))return;
+  if(jumpCheckTimer)clearTimeout(jumpCheckTimer);
+  jumpCheckTimer=setTimeout(()=>{jumpCheckTimer=null;checkJumpAccess(force);},180);
+}
+async function checkJumpAccess(force=false) {
+  if(state.jumpDismissed||!state.termsAccepted||(!state.connected&&(!state.network||state.network.Route!=="Direct")))return;
+  if(!force&&Date.now()-lastJumpCheck<5*60*1000)return;
+  if(jumpCheckPromise)return jumpCheckPromise;
+  const account=operations.account;
+  jumpCheckPromise=(async function(){
+    state.jumpChecking=true;render();
+    try {
+      let data=await request("checkJumpKey");
+      while(data.NeedsTrust){
+        if(account!==operations.account){await request("cancelTrust").catch(()=>{});return;}
+        const answer=await request("nativeAlert",{Title:"Verify the SoC SSH server",Message:"Compare this fingerprint with SoC IT before continuing.\n\n"+data.Host+"\n"+data.Fingerprint,Style:"warning",Buttons:["Cancel","Trust and continue"]});
+        if(answer.ButtonIndex!==1||account!==operations.account){await request("cancelTrust").catch(()=>{});return;}
+        data=await request("trustHost");
+      }
+      if(account!==operations.account)return;
+      lastJumpCheck=Date.now();
+      state.jumpSetup={Status:data.Status||"unavailable"};
+      render();
+    } catch(error) {
+      if(account===operations.account){state.jumpSetup={Status:"unavailable"};if(error.Code==="changedHostKey")notifyError(error,"account");render();}
+    } finally {state.jumpChecking=false;jumpCheckPromise=null;render();}
+  })();
+  return jumpCheckPromise;
+}
+async function submitJumpEnrollment(createNew=false) {
+  if(state.jumpEnrollment)return;
+  const previousUsername=state.username,previousKeyPath=state.keyPath;
+  if(!await saveAccount({silent:true}))return;
+  if(previousUsername!==state.username||previousKeyPath!==state.keyPath){
+    state.jumpEnrollment=false;invalidateJumpSetup();
+    state.accountNotice="The account or key changed. Check jump access again before enrolling.";render();return;
+  }
+  state.jumpEnrollment=true;state.accountError=null;render();
+  const account=operations.account;
+  let action=createNew?"createAndEnrollKey":"enrollJumpKey";
+  const additional=(document.getElementById("jump-public-keys")||{}).value||state.jumpPublicKeyDraft;
+  const requestData={};
+  if(action==="enrollJumpKey"){
+    if(state.jumpExpectedFingerprints.length)requestData.ExpectedFingerprints=state.jumpExpectedFingerprints;
+    requestData.AdditionalPublicKeys=additional;
+  }
+  try {
+    let data=await request(action,requestData);
+    if(account===operations.account)applyJumpEnrollmentResult(data);
+    while(data.NeedsTrust){
+      if(account!==operations.account){await request("cancelTrust").catch(()=>{});return;}
+      const answer=await request("nativeAlert",{Title:"Verify the SoC SSH server",Message:"Compare this fingerprint with SoC IT before continuing.\n\n"+data.Host+"\n"+data.Fingerprint,Style:"warning",Buttons:["Cancel","Trust and continue"]});
+      if(answer.ButtonIndex!==1||account!==operations.account){await request("cancelTrust").catch(()=>{});return;}
+      data=await request("trustHost");
+      if(account===operations.account)applyJumpEnrollmentResult(data);
+    }
+    if(account!==operations.account)return;
+    if(data.KeyPath){state.formKeyPassphrase="";}
+    if(data.NeedsPublicKeys){
+      state.jumpExpectedFingerprints=data.ExpectedFingerprints||[];
+      state.jumpMissingFingerprints=data.MissingFingerprints||[];
+      state.jumpPublicKeyDraft=additional;
+      state.jumpEnrollment=false;navigate("Account");render();
+      return;
+    }
+    if(data.Enrolled&&data.Ready){
+      state.jumpSetup={Status:"ready"};state.jumpExpectedFingerprints=[];state.jumpMissingFingerprints=[];state.jumpPublicKeyDraft="";state.jumpDismissed=false;
+      state.accountNotice="SSH jump access is set up and ready to use.";state.jumpEnrollment=false;lastJumpCheck=Date.now();render();
+      showNativeAlert("SSH jump access ready",state.accountNotice,"success",[],3500);
+      return;
+    }
+    if(data.Status){
+      state.jumpSetup={Status:data.Status};
+      if(data.Status==="ready"){
+        state.jumpExpectedFingerprints=[];state.jumpMissingFingerprints=[];state.jumpPublicKeyDraft="";
+        state.accountNotice="SSH jump access is set up and ready to use.";lastJumpCheck=Date.now();
+        showNativeAlert("SSH jump access ready",state.accountNotice,"success",[],3500);
+      }
+      render();return;
+    }
+  } catch(error) {
+    if(account===operations.account){
+      if(error.Data&&error.Data.KeyPath){state.keyPath=error.Data.KeyPath;if(error.Data.NewKeyCreated)state.hasKeyPassphrase=true;}
+      if(error.Data&&error.Data.Disconnected){state.connected=false;state.route="";}
+      if(error.Code==="enrollmentFailed")state.jumpSetup={Status:"enrollmentFailed"};
+      else if(error.Code==="keyPassphrase")state.jumpSetup={Status:"locked"};
+      else if(error.Code==="jumpKeysChanged"){state.jumpExpectedFingerprints=[];state.jumpMissingFingerprints=[];state.jumpPublicKeyDraft="";}
+      else if(error.Code==="network")state.jumpSetup={Status:"network"};
+      else if(error.Code==="accountAuthentication")state.jumpSetup={Status:"accountAuthentication"};
+      else if(["keyServiceUnavailable","enrollmentUncertain","enrollmentUnverified","enrollmentUnavailable","changedHostKey"].includes(error.Code)||error.Data&&error.Data.Enrolled)state.jumpSetup={Status:"unavailable"};
+      state.accountError=error;notifyError(error,"account");
+    }
+  } finally {
+    if(account===operations.account){state.jumpEnrollment=false;render();}
+  }
 }
 async function pickPDF() {
   if(state.printAttemptInProgress)return;
@@ -487,6 +615,7 @@ async function sendConfirmedPrint(snapshot,ctx) {
     prepared=d.PreparedHandle;
     if(!operations.current(ctx))return;
     const result=await request('submitPrint',{PreparedHandle:prepared});
+    if(state.route==='Direct')scheduleJumpCheck();
     if(result.OperationID)state.jobs=[{ID:result.OperationID,Username:snapshot.username,FileName:snapshot.fileName,PrinterID:snapshot.printer.ID,Queue:snapshot.queue,SubmittedAt:new Date().toISOString(),State:result.State,SpoolerID:result.SpoolerID||'',Message:result.Message||'',PrintSettings:JSON.stringify(snapshot.options)}].concat(state.jobs);
     if(operations.current(ctx)){state.printResult=result;state.printError=null;announce(result.Message);if(result.State==='failed'||result.State==='unknown'||result.Warning)notifyError({Error:result.Warning||result.Message},'print');}
   }catch(e){if(operations.current(ctx)){state.printError=e;if(e.Code==='timeout')state.printResult={State:'unknown',FileName:snapshot.fileName,Queue:snapshot.queue,PageRange:snapshot.options.PageRange,Copies:snapshot.options.Copies,Message:e.Error};notifyError(e,'print');}}
@@ -508,7 +637,7 @@ async function connectThenPrint() {
 }
 async function refreshJobs(explicit=false) {
   const ctx=operations.begin('jobs');if(!ctx)return;
-  try{const d=await request('refreshJobs');if(operations.current(ctx)){state.jobs=d.Jobs||[];state.jobsError='';}}
+  try{const d=await request('refreshJobs');if(operations.current(ctx)){state.jobs=d.Jobs||[];state.jobsError='';if(state.route==='Direct')scheduleJumpCheck();}}
   catch(e){if(operations.current(ctx)){state.jobsError=e.Error;notifyError(e,'jobs');}}
   finally{operations.end(ctx);render();}
 }
@@ -520,7 +649,7 @@ async function refreshQueue(allowConnect=true) {
     if(!state.connected&&!await connectAccount(null,ctx))return;
     if(!operations.current(ctx))return;
     const data=await request('queue',{Queue:queue});
-    if(operations.current(ctx)){state.queueData=data;announce('Queue updated.');}
+    if(operations.current(ctx)){state.queueData=data;announce('Queue updated.');if(state.route==='Direct')scheduleJumpCheck();}
   }catch(e){if(operations.current(ctx)){state.connected=false;state.queueError=e.Error||'Connection failed.';notifyError(e,'queue');}}
   finally{operations.end(ctx);state.queueLoading=false;render();if(ctx.queue!==operations.queue&&state.page==='Queues'&&state.connected)refreshQueue(false);}
 }
@@ -533,7 +662,7 @@ document.addEventListener("click",async function(event) {
     try {
       await request("acceptTerms",{TermsVersion:state.termsVersion});
       state.termsAccepted=true;state.termsSaving=false;state.page="Print";render();
-      request("detectNetwork").then(function(net){state.network=net;render();}).catch(function(){});
+      request("detectNetwork").then(function(net){state.network=net;render();if(net.Route==="Direct"&&state.hasPassword)scheduleJumpCheck();}).catch(function(){});
     } catch(e) {state.termsSaving=false;render();notifyError(e,"terms");}
     return;
   }
@@ -543,6 +672,29 @@ document.addEventListener("click",async function(event) {
   }
   if(action==="accountSettingsForKey") {
     clearNotification();navigate("Account");if(!state.keyPath)state.showCreateKey=true;render();return;
+  }
+  if(action==="dismissJumpSetup") {state.jumpDismissed=true;render();return;}
+  if(action==="goAccountJump") {navigate("Account");render();return;}
+  if(action==="checkJumpSetup") {
+    state.jumpDismissed=false;
+    if(state.connected&&state.route==="Jump host"){state.jumpSetup={Status:"ready"};render();return;}
+    if(!state.connected){try{state.network=await request("detectNetwork");}catch(_){state.network={Available:false};}}
+    if(!state.connected&&(!state.network||state.network.Route!=="Direct")){
+      await showNativeAlert("Connect to the SoC network","Jump access setup is available after SimplyPrint can connect directly to SoC. Join the SoC network or NUS VPN, then check again.","info",[]);return;
+    }
+    await checkJumpAccess(true);return;
+  }
+  if(action==="autoEnrollJumpKey") {state.jumpDismissed=false;await submitJumpEnrollment(true);return;}
+  if(action==="enrollJumpKey") {state.jumpDismissed=false;await submitJumpEnrollment(false);return;}
+  if(action==="submitJumpPublicKeys") {await submitJumpEnrollment(false);return;}
+  if(action==="cancelJumpEnrollment") {state.jumpExpectedFingerprints=[];state.jumpMissingFingerprints=[];state.jumpPublicKeyDraft="";state.jumpEnrollment=false;state.accountNotice="Enrollment paused. Your registered keys were not changed.";render();return;}
+  if(action==="chooseKeyForJump") {
+    navigate("Account");
+    try {
+      const chosen=await request("chooseKey");
+      if(!chosen.Cancelled){if(state.keyPath!==chosen.Path){operations.changeAccount();invalidateJumpSetup();}state.keyPath=chosen.Path;state.hasKeyPassphrase=false;state.formKeyPassphrase="";state.accountNotice="Key selected. Save it, then check jump access.";render();}
+    } catch(error){notifyError(error,"account");}
+    return;
   }
   if(action==="retryPrint") {clearNotification();await connectThenPrint();return;}
   if(action==="retryQueue") {clearNotification();await refreshQueue(true);return;}
@@ -572,7 +724,7 @@ document.addEventListener("click",async function(event) {
     catch(e){state.accountError=e;notifyError(e,"account");render();}return;
   }
   if(action==="chooseKey") {
-    try {const d=await request("chooseKey");if(!d.Cancelled){const changed=d.Path!==state.keyPath;state.keyPath=d.Path;state.generatedPublicKey="";if(changed){state.hasKeyPassphrase=false;state.formKeyPassphrase="";state.revealedSavedKeyPassphrase=false;state.keyPassphraseVisible=false;}state.accountError=null;state.accountNotice="Key selected. Save the settings before connecting.";showNativeAlert("SSH key selected",state.accountNotice,"success",[],3500);render();}}
+    try {const d=await request("chooseKey");if(!d.Cancelled){const changed=d.Path!==state.keyPath;if(changed){operations.changeAccount();invalidateJumpSetup();}state.keyPath=d.Path;state.generatedPublicKey="";if(changed){state.hasKeyPassphrase=false;state.formKeyPassphrase="";state.revealedSavedKeyPassphrase=false;state.keyPassphraseVisible=false;}state.accountError=null;state.accountNotice="Key selected. Save the settings before connecting.";showNativeAlert("SSH key selected",state.accountNotice,"success",[],3500);render();}}
     catch(e){state.accountError=e;notifyError(e,"account");render();}return;
   }
   if(action==="clearKey") {
@@ -609,7 +761,7 @@ document.addEventListener("click",async function(event) {
       state.keyPath=d.KeyPath;state.generatedPublicKey=d.PublicKey;state.hasKeyPassphrase=!d.VaultWarning;state.formKeyPassphrase=pass;state.showCreateKey=false;
       if(d.Disconnected){state.connected=false;state.route="";}
       state.busy="";render();
-      state.accountNotice=[d.VaultWarning,"Register this public key manually with SoC before using SSH Jump."].filter(Boolean).join(" ");
+      state.accountNotice=[d.VaultWarning,"Your key is ready. Enroll it with the SoC SSH Key Service in Account, or follow the manual guide."].filter(Boolean).join(" ");
       showNativeAlert("SSH key created",state.accountNotice,d.VaultWarning?"warning":"info",[{label:"Open SSH key guide",action:"keyGuide"}]);
     } catch(e){state.busy="";if(operations.current(ctx)){state.accountError=e;notifyError(e,"account");}render();}return;
   }
@@ -656,9 +808,10 @@ document.addEventListener("click",async function(event) {
   }
 });
 document.addEventListener("input",function(event) {
-  if(event.target.id==="password"){state.formPassword=event.target.value;if(state.passwordVisible)state.revealedSavedPassword=false;}
-  if(event.target.id==="key-pass"){state.formKeyPassphrase=event.target.value;if(state.keyPassphraseVisible)state.revealedSavedKeyPassphrase=false;}
-  if(event.target.id==="username"){state.formUsername=event.target.value;operations.changeAccount();hideRevealedSecrets();}
+  if(event.target.id==="jump-public-keys")state.jumpPublicKeyDraft=event.target.value;
+  if(event.target.id==="password"){state.formPassword=event.target.value;if(state.passwordVisible)state.revealedSavedPassword=false;operations.changeAccount();invalidateJumpSetup();}
+  if(event.target.id==="key-pass"){state.formKeyPassphrase=event.target.value;if(state.keyPassphraseVisible)state.revealedSavedKeyPassphrase=false;operations.changeAccount();invalidateJumpSetup();}
+  if(event.target.id==="username"){state.formUsername=event.target.value;operations.changeAccount();invalidateJumpSetup();hideRevealedSecrets();}
   if(event.target.id==="page-range"){state.pageRange=event.target.value;schedulePreview();}
   if(event.target.id==="copy-count"){state.copies=event.target.value;schedulePreview();}
   if(event.target.id==="scale-percent"){state.scalePercent=event.target.value;schedulePreview();}
@@ -742,13 +895,13 @@ document.addEventListener('visibilitychange',function(){if(document.hidden){hide
 
 request("initialize").then(function(d){
   state.printers=d.Printers||[];state.jobs=d.Jobs||[];state.username=d.Username||"";state.formUsername=state.username;state.keyPath=d.KeyPath||"";
-  state.termsVersion=d.TermsVersion||"2";
+  state.termsVersion=d.TermsVersion||"3";
   state.termsAccepted=d.AcceptedTermsVersion===state.termsVersion;
   state.hasPassword=!!d.HasSavedPassword;state.hasKeyPassphrase=!!d.HasSavedKeyPassphrase;
   state.directoryPrinter=publicPrinters().length?publicPrinters()[0].ID:"";
   if(publicPrinters().length)setPrinter(publicPrinters()[0]);
   render();
-  if(state.termsAccepted)request("detectNetwork").then(function(net){state.network=net;if(!state.connected)render();}).catch(function(){});
+  if(state.termsAccepted)request("detectNetwork").then(function(net){state.network=net;if(!state.connected)render();if(net.Route==="Direct"&&state.hasPassword)scheduleJumpCheck();}).catch(function(){});
 }).catch(function(e){
   state.printers=[];render();notifyError(e||{Error:"Restart the app and try again."},"startup");
 });

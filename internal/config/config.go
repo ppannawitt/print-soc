@@ -9,12 +9,13 @@ import (
 
 const AppName = "socprint"
 const ConfigDirEnv = "SOCPRINT_CONFIG_DIR"
-const TermsVersion = "2"
+const TermsVersion = "3"
 
 type Settings struct {
-	Username     string `json:"username,omitempty"`
-	KeyPath      string `json:"key_path,omitempty"`
-	TermsVersion string `json:"terms_version,omitempty"`
+	Username                  string   `json:"username,omitempty"`
+	KeyPath                   string   `json:"key_path,omitempty"`
+	KeyPassphraseFingerprints []string `json:"key_passphrase_fingerprints,omitempty"`
+	TermsVersion              string   `json:"terms_version,omitempty"`
 }
 
 func Directory() (string, error) {

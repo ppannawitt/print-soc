@@ -11,6 +11,9 @@ const assets=['SimplyPrint-at-SoC-Universal.dmg','SimplyPrint-at-SoC-Universal.d
 const release={tag_name:'v1.0.1',draft:false,prerelease:false,assets};
 test('release lookup accepts only stable repository assets with a DMG, checksum and validation record',()=>{
   assert.equal(validate(release).download,prefix+'SimplyPrint-at-SoC-Universal.dmg');
+  const nextPrefix='https://github.com/ppannawitt/print-soc/releases/download/v1.1.0/';
+  const nextRelease={...release,tag_name:'v1.1.0',assets:assets.map(asset=>({...asset,browser_download_url:asset.browser_download_url.replace(prefix,nextPrefix)}))};
+  assert.equal(validate(nextRelease).version,'v1.1.0');
   for(const bad of [null,{...release,draft:true},{...release,prerelease:true},{...release,tag_name:'v1.0.1-rc1'},{...release,assets:assets.slice(0,2)},{...release,assets:assets.map(a=>({...a,browser_download_url:'https://evil.invalid/'+a.name}))},{...release,assets:assets.map(a=>({...a,size:0}))},{...release,assets:assets.map(a=>({...a,name:a.name.replace('Universal','Universal-Development')}))}])assert.equal(validate(bad),null);
 });
 test('all website pages have valid local navigation, language and accessible main content',()=>{
@@ -24,10 +27,10 @@ test('all website pages have valid local navigation, language and accessible mai
     }
   }
 });
-test('published v1 has a direct Mac download and Windows coming soon',()=>{
+test('published app has a direct Mac download and Windows coming soon',()=>{
   const home=fs.readFileSync(new URL('index.html',site),'utf8');
   assert.ok(home.includes('Available now'));assert.ok(home.includes('Download for Windows'));assert.ok(home.includes('Coming soon'));
-  assert.ok(home.includes('href="'+prefix+'SimplyPrint-at-SoC-Universal.dmg"'));
+  assert.match(home,/href="https:\/\/github\.com\/ppannawitt\/print-soc\/releases\/download\/v\d+\.\d+\.\d+\/SimplyPrint-at-SoC-Universal\.dmg"/);
   assert.doesNotMatch(home, /V1 is being prepared|<button id="download"|<a[^>]*>GitHub<\/a>/);
   for(const name of ['index.html','printing.html','ssh-keys.html'])assert.doesNotMatch(fs.readFileSync(new URL(name,site),'utf8'),/xattr|spctl --master-disable|curl.+\|\s*(?:sh|bash)/);
 });

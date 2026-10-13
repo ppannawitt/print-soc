@@ -68,3 +68,46 @@ func TestKeyUnlockErrorsDistinguishLocalKeyAndAccountAuthentication(t *testing.T
 		t.Fatal(message)
 	}
 }
+
+func TestMergeRegisteredJumpKeysPreservesEveryFingerprintAndRejectsExtras(t *testing.T) {
+	selected := authorizedKeyFixture(t)
+	oldOne := authorizedKeyFixture(t)
+	oldTwo := authorizedKeyFixture(t)
+	extra := authorizedKeyFixture(t)
+	fingerprint := func(line string) string {
+		t.Helper()
+		value, err := fingerprintForAuthorizedKey(line)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	current := []string{fingerprint(oldOne), fingerprint(oldTwo)}
+	merged, missing, err := mergeRegisteredJumpKeys(current, selected, []string{oldOne})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(merged) != 2 || len(missing) != 1 || missing[0] != fingerprint(oldTwo) {
+		t.Fatalf("partial local records produced %d merged keys and missing %#v", len(merged), missing)
+	}
+	merged, missing, err = mergeRegisteredJumpKeys(current, selected, []string{oldOne, oldTwo})
+	if err != nil || len(missing) != 0 || len(merged) != 3 {
+		t.Fatalf("complete records did not preserve the list: keys=%d missing=%#v err=%v", len(merged), missing, err)
+	}
+	if _, _, err := mergeRegisteredJumpKeys(current, selected, []string{oldOne, oldTwo, extra}); err == nil {
+		t.Fatal("an unregistered, unselected public key was accepted")
+	}
+}
+
+func authorizedKeyFixture(t *testing.T) string {
+	t.Helper()
+	public, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ssh.NewPublicKey(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+}

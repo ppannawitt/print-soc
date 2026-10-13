@@ -32,7 +32,7 @@ class ReleaseGates(unittest.TestCase):
         record = copy.deepcopy(self.record)
         record['source_sha256'] = 'outdated'
         self.assertTrue(gates.validate(record, '1.0.0'))
-        self.assertTrue(gates.validate(self.record, '1.0.1'))
+        self.assertTrue(gates.validate(self.record, '1.1.0'))
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -38,4 +39,9 @@ func LoadPrivateKey(path, passphrase string) (ssh.Signer, error) {
 		return ssh.ParsePrivateKeyWithPassphrase(contents, []byte(passphrase))
 	}
 	return signer, err
+}
+
+func isKeyPassphraseError(err error) bool {
+	var missing *ssh.PassphraseMissingError
+	return errors.As(err, &missing) || errors.Is(err, x509.IncorrectPasswordError)
 }

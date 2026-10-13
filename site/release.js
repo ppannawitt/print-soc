@@ -15,7 +15,7 @@
   fetch('https://api.github.com/repos/ppannawitt/print-soc/releases/latest',{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(8000)})
     .then(response=>{if(response.status===404)return null;if(!response.ok)throw new Error('unavailable');return response.json();})
     .then(release=>{
-      const result=publishedDownload(release);if(!result||result.version==='v1.0.1')return;
+      const result=publishedDownload(release);if(!result)return;
       const link=document.createElement('a');link.id='download';link.className='download-button';link.href=result.download;link.textContent='Download for macOS';
       document.getElementById('download').replaceWith(link);
       document.getElementById('current-release').textContent='Current release: '+result.version;

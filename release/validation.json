@@ -1,30 +1,38 @@
 {
-  "version": "1.0.1",
-  "source_sha256": "fb46b5a1adb84a8fcaccb103ba611a0a409df07f7252a9037cecdf281e830c40",
+  "version": "1.1.0",
+  "source_sha256": "0379de1f19096879ceb6cddf3d65511182b454e34d80f9d9685839fb54c93d1a",
   "checks": {
     "apple_silicon_install_upgrade": {
       "passed": false,
-      "evidence": ""
+      "evidence": "Universal DMG and arm64 slice were inspected on an Apple Silicon Mac. Installing and upgrading the app on a real Apple Silicon system was not tested."
     },
     "intel_install_upgrade": {
       "passed": false,
-      "evidence": ""
+      "evidence": "The x86_64 slice cross-builds and targets macOS 13.0. No physical Intel Mac installation or upgrade was tested."
     },
     "macos_13": {
       "passed": false,
-      "evidence": ""
+      "evidence": "Both executable slices declare macOS 13.0 as their minimum. Runtime behavior on macOS 13 was not tested."
     },
     "visual_keyboard_voiceover": {
       "passed": false,
-      "evidence": ""
+      "evidence": "Automated UI regression tests passed. A complete visual, keyboard, and VoiceOver review of the 1.1.0 app was not performed."
     },
     "real_soc_print_queue_cancel": {
       "passed": false,
-      "evidence": ""
+      "evidence": "No live SoC print, queue, or cancellation operation was performed during this validation."
     },
     "keychain_account_switching": {
       "passed": false,
-      "evidence": ""
+      "evidence": "Keychain integration has automated coverage, but real account switching and credential retrieval after app restart were not observed."
+    },
+    "real_soc_jump_enrollment_preservation": {
+      "passed": false,
+      "evidence": "The user supplied a terminal transcript showing successful manual jump-key registration and the resulting ED25519 fingerprint. The app-driven merge, preservation, readback, and key-only access flow was not run against the SoC service."
+    },
+    "managed_key_passphrase_keychain_restart": {
+      "passed": false,
+      "evidence": "Automated tests verify that the passphrase is not returned by the UI bridge and Keychain persistence is required before enrollment. A real managed key was not enrolled and unlocked after app restart."
     }
   },
   "distribution": {
@@ -33,22 +41,36 @@
     "apple_notarized": false,
     "gatekeeper_accepted": false
   },
+  "artifact": {
+    "file": "SimplyPrint-at-SoC-Universal.dmg",
+    "sha256": "6adbbd861fcb7c51e1661a0fd11998a9f51fa58952d012ed0255d4a75c0fda24",
+    "dmg_integrity": "passed",
+    "contents": "only SimplyPrint @ SoC.app",
+    "architectures": ["arm64", "x86_64"],
+    "minimum_macos": "13.0",
+    "bundle_version": "1.1.0",
+    "bundle_build": "110",
+    "ad_hoc_signature": "passed"
+  },
   "maintainer_attestation": {
-    "date": "2026-10-08",
-    "testing_statement": "I have tested thoroughly, just publish now",
-    "publication_authorization": "Not required to be apple sign just release",
-    "coverage_note": "Prior maintainer testing and authorization are retained. No new device-specific coverage is claimed for v1.0.1; signed-production per-check evidence remains incomplete."
+    "date": "2026-10-13",
+    "testing_statement": "Automated release checks passed; device-specific and live SoC checks below are explicitly marked incomplete.",
+    "publication_authorization": "The maintainer requested publication of v1.1.0 using the existing ad-hoc distribution method.",
+    "coverage_note": "No physical Intel or macOS 13 test, full visual/accessibility review, live print smoke test, app-driven SoC enrollment preservation check, or managed-key Keychain restart test is claimed. The supplied manual registration transcript is recorded as context, not as app validation."
   },
   "automated_checks": {
-    "go_race_tests": "passed",
-    "go_vet": "passed",
-    "native_pdf_bridge_frontend_tests": "passed",
-    "website_tests": "passed",
-    "dependency_scan": "no reachable or imported-package findings; retained unimported OpenPGP advisory",
+    "go_race_tests": "passed with Go 1.27.2",
+    "go_vet": "passed with Go 1.27.2",
+    "native_pdf_bridge_frontend_tests": "passed; 25 UI tests passed",
+    "website_tests": "passed; 3 tests passed",
+    "jump_setup_ui_tests": "passed; automated cases cover statuses, coalescing, dismissal, cancellation, and account changes",
+    "dependency_scan": "govulncheck: 0 reachable findings and 0 findings in imported packages; GO-2026-5932 affects unmaintained golang.org/x/crypto/openpgp, which is not imported or called",
+    "dependency_integrity": "go mod verify passed",
+    "source_scan": "passed",
+    "release_record_tests": "passed",
     "app_only_dmg_contents": "passed",
     "arm64_minimum_macos": "13.0",
     "x86_64_minimum_macos": "13.0",
-    "local_launch": "passed",
-    "local_launch_macos": "26.6.2"
+    "local_launch": "not verified; a prior isolated launch attempt aborted with SIGABRT in the sandbox"
   }
 }

@@ -28,3 +28,16 @@
 
 .account-create-note{font-size:12px;color:var(--sub);line-height:1.5;margin:0 0 14px}
 .account-create-note .link-btn{font-size:inherit;padding:0;font-weight:400}
+
+.jump-setup,.jump-key-form{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:14px 16px;margin:0 0 20px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.jump-setup strong,.jump-access-row strong{font-size:12px;font-weight:600}
+.jump-setup p,.jump-access-row p,.jump-key-form p{font-size:11px;color:var(--sub);line-height:1.5;margin:4px 0 0}
+.jump-setup .btn-row{margin:0;flex-wrap:wrap;justify-content:flex-end}
+.jump-key-form{display:block}
+.jump-key-form h2{font-size:14px;margin:0 0 6px}
+.jump-key-form ul{padding-left:20px;max-height:100px;overflow:auto;font-size:11px}
+.jump-key-form label{display:block;font-size:11px;font-weight:600;margin:12px 0 6px}
+.jump-key-form textarea{display:block;width:100%;resize:vertical;font:11px ui-monospace,SFMono-Regular,monospace;line-height:1.5}
+.jump-key-form .btn-row{margin:12px 0 0}
+.jump-access-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
+@media(max-width:720px){.jump-setup{align-items:flex-start;flex-direction:column}.jump-setup .btn-row{justify-content:flex-start}.jump-access-row{align-items:flex-start;flex-direction:column}}

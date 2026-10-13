@@ -1,6 +1,6 @@
 # SimplyPrint @ SoC
 
-SimplyPrint @ SoC provides a hassle-free experience with SoC printing without you ever touching the command line.
+Print PDFs with the SimplyPrint @ SoC app for macOS or through SSH from a terminal or command prompt.
 
 ## Download
 
@@ -18,7 +18,7 @@ If macOS says the developer cannot be verified, first try opening the app, then 
 
 1. Open **Account** in the app.
 2. Enter your SoC username and password, then choose **Save**.
-3. If you need an SSH key, follow the [SSH-key setup guide](https://ppannawitt.github.io/print-soc/ssh-keys.html). Register it manually with SoC, then select the key in **Account**.
+3. Select an existing SSH key in **Account**, or choose **Set up automatically** when the app detects direct SoC access. The app checks whether your key already works before offering enrollment. New keys are protected with a random passphrase saved in macOS Keychain.
 4. Choose **Connect**. If you are off campus, connect to the NUS VPN if needed.
 
 You need an active mySoC account with printing access. The [printing guide](https://ppannawitt.github.io/print-soc/printing.html) includes account and connection help.
