@@ -18,7 +18,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           git -c core.autocrlf=false checkout-index --force --all
-          if ((Get-FileHash .github/workflows/windows-source.patch.txt -Algorithm SHA256).Hash -ne '4707508f39c6b140c74df910bd235fd51d8a306e794106be976143fdf72989aa') { throw 'Source patch checksum mismatch' }
+          if ((Get-FileHash .github/workflows/windows-source.patch.txt -Algorithm SHA256).Hash -ne '28bdef845bf6b2cddbfb5d9336f0c640380223d1633c1ed5b9e1b2a091c85a67') { throw 'Source patch checksum mismatch' }
           git config --global core.longpaths true
           git apply .github/workflows/windows-source.patch.txt
           if ($LASTEXITCODE -ne 0) { throw 'Source patch did not apply' }
@@ -55,6 +55,8 @@ jobs:
             ${{ runner.temp }}/sp-deps/json.hpp
       - name: Test and package Windows installer
         run: ./scripts/build-windows.ps1 -Mode Development -Dependencies "$env:RUNNER_TEMP/sp-deps"
+      - name: Verify installation, launch, upgrade and uninstall
+        run: ./scripts/test-windows-install.ps1 -Installer dist/windows/SimplyPrint-at-SoC-Windows-x64-Setup-Development.exe
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: SimplyPrint-Windows-x64-Test-Installer

@@ -7330,10 +7330,10 @@ index 0000000..1b99259
 +    print('Windows release checks match this source and signed installer.')
 diff --git a/scripts/prepare-windows-dependencies.ps1 b/scripts/prepare-windows-dependencies.ps1
 new file mode 100644
-index 0000000..51c6348
+index 0000000..b7332c2
 --- /dev/null
 +++ b/scripts/prepare-windows-dependencies.ps1
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,85 @@
 +#requires -Version 7.3
 +param([string]$OutputDir = "$PSScriptRoot/../dist/windows-deps")
 +$ErrorActionPreference = 'Stop'
@@ -7375,6 +7375,9 @@ index 0000000..51c6348
 +$env:DEPOT_TOOLS_UPDATE = '0'
 +$env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
 +$env:PATH = "$depot;$env:PATH"
++# Automatic updates stay disabled to preserve the pinned revision. Initialize
++# its Python wrappers explicitly, which gn.bat requires on a fresh checkout.
++Invoke-Checked "$depot/bootstrap/win_tools.bat" @()
 +$source = "$OutputDir/pdfium-source"
 +New-Item -ItemType Directory -Force $source | Out-Null
 +Push-Location $source
@@ -7510,6 +7513,66 @@ index 0000000..66db292
 +if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed: $Path" }
 +$signature = Get-AuthenticodeSignature $Path
 +if ($signature.Status -ne 'Valid' -or !$signature.TimeStamperCertificate -or $signature.SignerCertificate.Thumbprint -ne $CertificateThumbprint) { throw "The signed file has an invalid identity or timestamp: $Path" }
+diff --git a/scripts/test-windows-install.ps1 b/scripts/test-windows-install.ps1
+new file mode 100644
+index 0000000..c44b205
+--- /dev/null
++++ b/scripts/test-windows-install.ps1
+@@ -0,0 +1,54 @@
++#requires -Version 7.3
++param([Parameter(Mandatory)][string]$Installer)
++$ErrorActionPreference = 'Stop'
++Set-StrictMode -Version Latest
++$Installer = (Resolve-Path $Installer).Path
++function Run-Bounded([string]$File, [string[]]$Arguments, [int]$Seconds = 90) {
++    $process = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru
++    if (!$process.WaitForExit($Seconds * 1000)) {
++        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
++        throw "Timed out: $File"
++    }
++    $process.Refresh()
++    if ($process.ExitCode -ne 0) { throw "$File exited with $($process.ExitCode)" }
++}
++# Use this script only on a disposable Windows runner: installation uses its account.
++$work = Join-Path ([IO.Path]::GetTempPath()) ('socprint-install-test-' + [guid]::NewGuid())
++New-Item -ItemType Directory $work | Out-Null
++$previousConfig = $env:SOCPRINT_CONFIG_DIR
++try {
++    $bootstrapper = "$work/WebView2Bootstrapper.exe"
++    Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrapper
++    $signature = Get-AuthenticodeSignature $bootstrapper
++    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation(?:,|$)') { throw 'WebView2 bootstrapper signature is invalid.' }
++    # Existing runtimes may return an already-installed code; the app launch below
++    # independently verifies the runtime actually loads and completes its bridge.
++    $runtime = Start-Process $bootstrapper -ArgumentList '/silent','/install' -PassThru
++    if (!$runtime.WaitForExit(180000)) {
++        Stop-Process -Id $runtime.Id -Force -ErrorAction SilentlyContinue
++        throw 'WebView2 installation timed out.'
++    }
++    $env:SOCPRINT_CONFIG_DIR = "$work/account"
++    Run-Bounded $Installer @('/S')
++    $installed = "$env:LOCALAPPDATA/Programs/SimplyPrint-SoC"
++    foreach ($name in @('SimplyPrint.exe','socprint-native.dll','Uninstall.exe','Third-Party-Notices.txt')) {
++        if (!(Test-Path "$installed/$name")) { throw "Installer omitted $name" }
++    }
++    # The host exits successfully only after app.js initializes through the
++    # trusted HTTPS origin and the native/Go JSON bridge. No terms are accepted.
++    Run-Bounded "$installed/SimplyPrint.exe" @('--smoke-test') 65
++    $marker = "$env:SOCPRINT_CONFIG_DIR/upgrade-preservation.txt"
++    'Preserve app data across setup and default uninstall.' | Set-Content $marker
++    Run-Bounded $Installer @('/S')
++    if (!(Test-Path $marker)) { throw 'Upgrade removed app data.' }
++    Run-Bounded "$installed/SimplyPrint.exe" @('--smoke-test') 65
++    Run-Bounded "$installed/Uninstall.exe" @('/S')
++    $deadline = [DateTime]::UtcNow.AddSeconds(15)
++    while ((Test-Path "$installed/SimplyPrint.exe") -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 250 }
++    if (Test-Path "$installed/SimplyPrint.exe") { throw 'Uninstall left the application executable.' }
++    if (!(Test-Path $marker)) { throw 'Default uninstall removed account data.' }
++    Write-Host 'Windows installation, launch/bridge, upgrade, restart and default uninstall smoke checks passed.'
++} finally {
++    $env:SOCPRINT_CONFIG_DIR = $previousConfig
++    Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
++}
 diff --git a/scripts/windows-go-notices.py b/scripts/windows-go-notices.py
 new file mode 100644
 index 0000000..4d67f92
@@ -8191,10 +8254,10 @@ index 0000000..c19a32d
 +extern "C" __declspec(dllexport) void __stdcall sp_respond(const char *);
 diff --git a/windows/native/host.cpp b/windows/native/host.cpp
 new file mode 100644
-index 0000000..7f34706
+index 0000000..a3f542b
 --- /dev/null
 +++ b/windows/native/host.cpp
-@@ -0,0 +1,970 @@
+@@ -0,0 +1,990 @@
 +#include "bridge.h"
 +#include "pdf.h"
 +#include <WebView2.h>
@@ -8250,6 +8313,8 @@ index 0000000..7f34706
 +  std::thread worker;
 +  bool stop = false;
 +  bool ready = false;
++  bool smoke = false;
++  bool smokeSucceeded = false;
 +  std::string pendingCommand;
 +  void send(json reply) {
 +    auto *data = new std::wstring(wide(reply.dump()));
@@ -8732,7 +8797,14 @@ index 0000000..7f34706
 +              !d["KeyPath"].get<std::string>().empty())
 +            h->keys.insert(fs::weakly_canonical(wide(d["KeyPath"])).wstring());
 +        }
-+        h->view->PostWebMessageAsJson(data->c_str());
++        HRESULT sent = h->view->PostWebMessageAsJson(data->c_str());
++        if (h->smoke && SUCCEEDED(sent) && reply.value("OK", false) &&
++            reply.contains("Data") && reply["Data"].is_object() &&
++            reply["Data"].contains("Platform") &&
++            reply["Data"].contains("TermsVersion")) {
++          h->smokeSucceeded = true;
++          PostMessageW(window, WM_CLOSE, 0, 0);
++        }
 +      } catch (...) {
 +      }
 +    }
@@ -8751,6 +8823,13 @@ index 0000000..7f34706
 +  case WM_CLOSE:
 +    DestroyWindow(window);
 +    return 0;
++  case WM_TIMER:
++    if (h && h->smoke && w == 1) {
++      KillTimer(window, 1);
++      DestroyWindow(window);
++      return 0;
++    }
++    break;
 +  case WM_DESTROY:
 +    if (h)
 +      h->closing = true;
@@ -9053,6 +9132,7 @@ index 0000000..7f34706
 +    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 +    SetCurrentProcessExplicitAppUserModelID(appID);
 +    host = new Host();
++    host->smoke = wcsstr(GetCommandLineW(), L"--smoke-test") != nullptr;
 +    host->assets = json::parse(assets);
 +    host->managed = managed;
 +    host->message = message;
@@ -9088,6 +9168,9 @@ index 0000000..7f34706
 +        0, className, L"SimplyPrint @ SoC", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
 +        CW_USEDEFAULT, width, height, nullptr, menu, cls.hInstance, nullptr);
 +    require(host->window != nullptr, "Could not create the app window.");
++    if (host->smoke)
++      require(SetTimer(host->window, 1, 45000, nullptr) != 0,
++              "Could not start the launch verification timer.");
 +    theme();
 +    ShowWindow(host->window, SW_SHOW);
 +    auto local = fs::path(knownFolder(FOLDERID_LocalAppData)) / L"socprint";
@@ -9144,7 +9227,7 @@ index 0000000..7f34706
 +                        PM_REMOVE))
 +      delete reinterpret_cast<std::wstring *>(msg.lParam);
 +    winrt::uninit_apartment();
-+    return 0;
++    return host->smoke && !host->smokeSucceeded ? 1 : 0;
 +  } catch (...) {
 +    if (host) {
 +      host->closing = true;
