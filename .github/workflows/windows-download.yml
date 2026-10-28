@@ -18,7 +18,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           git -c core.autocrlf=false checkout-index --force --all
-          if ((Get-FileHash .github/workflows/windows-source.patch.txt -Algorithm SHA256).Hash -ne '28bdef845bf6b2cddbfb5d9336f0c640380223d1633c1ed5b9e1b2a091c85a67') { throw 'Source patch checksum mismatch' }
+          if ((Get-FileHash .github/workflows/windows-source.patch.txt -Algorithm SHA256).Hash -ne 'e68ac1e40bd23052240fc25460b2b6c68483830852fddc33e40f13a63c52e8d9') { throw 'Source patch checksum mismatch' }
           git config --global core.longpaths true
           git apply .github/workflows/windows-source.patch.txt
           if ($LASTEXITCODE -ne 0) { throw 'Source patch did not apply' }
