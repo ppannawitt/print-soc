@@ -7330,10 +7330,10 @@ index 0000000..1b99259
 +    print('Windows release checks match this source and signed installer.')
 diff --git a/scripts/prepare-windows-dependencies.ps1 b/scripts/prepare-windows-dependencies.ps1
 new file mode 100644
-index 0000000..626f4f2
+index 0000000..b07a3d1
 --- /dev/null
 +++ b/scripts/prepare-windows-dependencies.ps1
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,101 @@
 +#requires -Version 7.3
 +param([string]$OutputDir = "$PSScriptRoot/../dist/windows-deps")
 +$ErrorActionPreference = 'Stop'
@@ -7408,6 +7408,11 @@ index 0000000..626f4f2
 +            $content = Get-Content $tool -Raw
 +            $content = $content -replace "SDK_VERSION = '10\.0\.28000\.0'", "SDK_VERSION = '$sdk'"
 +            Set-Content $tool $content -Encoding utf8 -NoNewline
++        }
++        if ([version]$sdk -lt [version]'10.0.28000.0') {
++            $winConfig = Get-Content 'build/config/win/BUILD.gn' -Raw
++            $winConfig = $winConfig.Replace('NTDDI_VERSION=NTDDI_WIN11_BR', 'NTDDI_VERSION=NTDDI_WIN11_GE')
++            Set-Content 'build/config/win/BUILD.gn' $winConfig -Encoding utf8 -NoNewline
 +        }
 +        Write-Host "Using installed Windows SDK $sdk"
 +        $gnArgs = 'is_debug=false is_component_build=false pdf_is_standalone=true pdf_is_complete_lib=true pdf_enable_v8=false pdf_enable_xfa=false pdf_use_skia=false use_custom_libcxx=false target_cpu="x64" pdf_use_partition_alloc=false pdf_enable_fontations=false pdf_enable_rust_bmp=false pdf_enable_rust_jpeg=false pdf_enable_rust_png=false treat_warnings_as_errors=false'
