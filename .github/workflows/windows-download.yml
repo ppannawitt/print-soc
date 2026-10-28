@@ -17,6 +17,7 @@ jobs:
       - name: Apply reviewed Windows implementation
         run: |
           $ErrorActionPreference = 'Stop'
+          git -c core.autocrlf=false checkout-index --force --all
           if ((Get-FileHash .github/workflows/windows-source.patch.txt -Algorithm SHA256).Hash -ne '4707508f39c6b140c74df910bd235fd51d8a306e794106be976143fdf72989aa') { throw 'Source patch checksum mismatch' }
           git config --global core.longpaths true
           git apply .github/workflows/windows-source.patch.txt
