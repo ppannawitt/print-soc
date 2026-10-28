@@ -1,0 +1,62 @@
+name: Build downloadable Windows test installer
+on:
+  push:
+    branches: [codex/windows-installer]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installer:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Apply reviewed Windows implementation
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((Get-FileHash .github/workflows/windows-source.patch.txt -Algorithm SHA256).Hash -ne '4707508f39c6b140c74df910bd235fd51d8a306e794106be976143fdf72989aa') { throw 'Source patch checksum mismatch' }
+          git config --global core.longpaths true
+          git apply .github/workflows/windows-source.patch.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Source patch did not apply' }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Enable MSVC and Windows SDK
+        run: ./scripts/windows-toolchain.ps1 -ForCI
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: pdfium-cache
+        with:
+          key: windows-pdfium-msvc-v2-${{ hashFiles('windows/dependencies.json', 'scripts/prepare-windows-dependencies.ps1', 'scripts/windows-notices.py') }}
+          path: |
+            ${{ runner.temp }}/sp-deps/pdfium
+            ${{ runner.temp }}/sp-deps/dependencies.json
+            ${{ runner.temp }}/sp-deps/prepared.json
+            ${{ runner.temp }}/sp-deps/webview2.zip
+            ${{ runner.temp }}/sp-deps/json.hpp
+      - name: Prepare pinned PDFium and WebView2 dependencies
+        run: ./scripts/prepare-windows-dependencies.ps1 -OutputDir "$env:RUNNER_TEMP/sp-deps"
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
+          path: |
+            ${{ runner.temp }}/sp-deps/pdfium
+            ${{ runner.temp }}/sp-deps/dependencies.json
+            ${{ runner.temp }}/sp-deps/prepared.json
+            ${{ runner.temp }}/sp-deps/webview2.zip
+            ${{ runner.temp }}/sp-deps/json.hpp
+      - name: Test and package Windows installer
+        run: ./scripts/build-windows.ps1 -Mode Development -Dependencies "$env:RUNNER_TEMP/sp-deps"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: SimplyPrint-Windows-x64-Test-Installer
+          path: dist/windows/*
+          if-no-files-found: error
+          retention-days: 30
